@@ -1,0 +1,38 @@
+{
+  "pages": [
+    "pages/index/index",
+    "pages/my/my",
+    "pages/campus/select",
+    "pages/campus/join",
+    "pages/history/index",
+    "pages/canteen/canteen",
+    "pages/service/service"
+  ],
+  "window": {
+    "navigationBarTextStyle": "black",
+    "navigationBarTitleText": "今天吃什么",
+    "navigationBarBackgroundColor": "#ffffff",
+    "backgroundColor": "#fffaf3"
+  },
+  "tabBar": {
+    "color": "#999999",
+    "selectedColor": "#FF7A2F",
+    "backgroundColor": "#FFFFFF",
+    "borderStyle": "white",
+    "list": [
+      {
+        "pagePath": "pages/index/index",
+        "text": "首页",
+        "iconPath": "static/images/tabbar/home.png",
+        "selectedIconPath": "static/images/tabbar/home-active.png"
+      },
+      {
+        "pagePath": "pages/my/my",
+        "text": "我的",
+        "iconPath": "static/images/tabbar/my.png",
+        "selectedIconPath": "static/images/tabbar/my-active.png"
+      }
+    ]
+  },
+  "usingComponents": {}
+}
