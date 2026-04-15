@@ -6,6 +6,7 @@ const _sfc_main = {
   setup(__props) {
     const statusBarHeight = common_vendor.index.getSystemInfoSync().statusBarHeight || 20;
     const state = common_vendor.ref(utils_appState.getAppState());
+    const isDraftSaved = common_vendor.ref(false);
     const form = common_vendor.reactive({
       campusName: "",
       campusTag: "",
@@ -15,6 +16,7 @@ const _sfc_main = {
     });
     common_vendor.onLoad(() => {
       state.value = utils_appState.getAppState();
+      hydrateDraft();
     });
     const theme = common_vendor.computed(() => utils_appState.getTheme(state.value.mode));
     const pageStyle = common_vendor.computed(() => ({
@@ -27,15 +29,52 @@ const _sfc_main = {
       boxShadow: theme.value.shadow,
       border: `1px solid ${theme.value.border}`
     }));
+    const statusCardStyle = common_vendor.computed(() => ({
+      background: theme.value.accentSoft,
+      boxShadow: theme.value.shadow,
+      border: `1px solid ${theme.value.border}`
+    }));
     const accentFillStyle = common_vendor.computed(() => ({
       background: `linear-gradient(135deg, ${theme.value.accent} 0%, ${theme.value.accentDeep} 100%)`,
       boxShadow: theme.value.shadow,
       color: "#ffffff"
     }));
-    function submitForm() {
+    function hydrateDraft() {
+      const draft = utils_appState.getCampusApplicationDraft();
+      if (!draft) {
+        return;
+      }
+      form.campusName = draft.campusName || "";
+      form.campusTag = draft.campusTag || "";
+      form.city = draft.city || "";
+      form.contactName = draft.contactName || "";
+      form.contact = draft.contact || "";
+      isDraftSaved.value = Boolean(draft.campusName || draft.contact);
+    }
+    function markDraftDirty() {
+      if (isDraftSaved.value) {
+        isDraftSaved.value = false;
+      }
+    }
+    function validateForm() {
       if (!form.campusName || !form.contact) {
         common_vendor.index.showToast({
           title: "请至少填校园名称和联系方式",
+          icon: "none"
+        });
+        return false;
+      }
+      return true;
+    }
+    function submitForm() {
+      if (!validateForm()) {
+        return;
+      }
+      if (!isDraftSaved.value) {
+        utils_appState.saveCampusApplicationDraft({ ...form });
+        isDraftSaved.value = true;
+        common_vendor.index.showToast({
+          title: "已保存，再点一次才会提交",
           icon: "none"
         });
         return;
@@ -43,8 +82,9 @@ const _sfc_main = {
       utils_appState.submitCampusApplication({
         ...form
       });
+      utils_appState.clearCampusApplicationDraft();
       common_vendor.index.showToast({
-        title: "已提交，当前状态为待审核",
+        title: "已提交到后台，当前为待审核",
         icon: "none"
       });
       setTimeout(() => {
@@ -55,25 +95,30 @@ const _sfc_main = {
       common_vendor.index.navigateBack();
     }
     return (_ctx, _cache) => {
-      return {
+      return common_vendor.e({
         a: common_vendor.o(goBack, "ca"),
         b: `${common_vendor.unref(statusBarHeight) + 12}px`,
         c: common_vendor.s(cardStyle.value),
-        d: form.campusName,
-        e: common_vendor.o(($event) => form.campusName = $event.detail.value, "4a"),
-        f: form.campusTag,
-        g: common_vendor.o(($event) => form.campusTag = $event.detail.value, "c7"),
-        h: form.city,
-        i: common_vendor.o(($event) => form.city = $event.detail.value, "0a"),
-        j: form.contactName,
-        k: common_vendor.o(($event) => form.contactName = $event.detail.value, "57"),
-        l: form.contact,
-        m: common_vendor.o(($event) => form.contact = $event.detail.value, "66"),
-        n: common_vendor.s(cardStyle.value),
-        o: common_vendor.s(accentFillStyle.value),
-        p: common_vendor.o(submitForm, "f7"),
-        q: common_vendor.s(pageStyle.value)
-      };
+        d: isDraftSaved.value
+      }, isDraftSaved.value ? {
+        e: common_vendor.s(statusCardStyle.value)
+      } : {}, {
+        f: common_vendor.o([($event) => form.campusName = $event.detail.value, markDraftDirty], "a4"),
+        g: form.campusName,
+        h: common_vendor.o([($event) => form.campusTag = $event.detail.value, markDraftDirty], "f9"),
+        i: form.campusTag,
+        j: common_vendor.o([($event) => form.city = $event.detail.value, markDraftDirty], "84"),
+        k: form.city,
+        l: common_vendor.o([($event) => form.contactName = $event.detail.value, markDraftDirty], "8e"),
+        m: form.contactName,
+        n: common_vendor.o([($event) => form.contact = $event.detail.value, markDraftDirty], "aa"),
+        o: form.contact,
+        p: common_vendor.s(cardStyle.value),
+        q: common_vendor.t(isDraftSaved.value ? "提交到后台" : "保存申请内容"),
+        r: common_vendor.s(accentFillStyle.value),
+        s: common_vendor.o(submitForm, "45"),
+        t: common_vendor.s(pageStyle.value)
+      });
     };
   }
 };

@@ -14,6 +14,7 @@ import {
 const STATE_KEY = 'eat-what-state'
 const HISTORY_KEY = 'eat-what-history'
 const APPLICATION_KEY = 'eat-what-campus-applications'
+const APPLICATION_DRAFT_KEY = 'eat-what-campus-application-draft'
 const SELECTED_CANTEEN_KEY = 'selectedCanteen'
 const TAB_BAR_ROUTES = ['pages/index/index', 'pages/my/my']
 
@@ -362,6 +363,24 @@ export function submitCampusApplication(formData) {
 
 export function getCampusApplications() {
   return getStoredApplications()
+}
+
+export function getCampusApplicationDraft() {
+  return safeRead(APPLICATION_DRAFT_KEY, null)
+}
+
+export function saveCampusApplicationDraft(formData) {
+  const draft = {
+    ...formData,
+    updatedAt: formatTimeLabel()
+  }
+
+  safeWrite(APPLICATION_DRAFT_KEY, draft)
+  return draft
+}
+
+export function clearCampusApplicationDraft() {
+  safeWrite(APPLICATION_DRAFT_KEY, '')
 }
 
 export function getCanteenListByCampusName(campusName) {

@@ -4,6 +4,7 @@ const common_data = require("../common/data.js");
 const STATE_KEY = "eat-what-state";
 const HISTORY_KEY = "eat-what-history";
 const APPLICATION_KEY = "eat-what-campus-applications";
+const APPLICATION_DRAFT_KEY = "eat-what-campus-application-draft";
 const SELECTED_CANTEEN_KEY = "selectedCanteen";
 const TAB_BAR_ROUTES = ["pages/index/index", "pages/my/my"];
 const defaultState = {
@@ -67,7 +68,7 @@ function safeWrite(key, value) {
   try {
     common_vendor.index.setStorageSync(key, value);
   } catch (error) {
-    common_vendor.index.__f__("warn", "at utils/app-state.js:84", "storage write failed", error);
+    common_vendor.index.__f__("warn", "at utils/app-state.js:85", "storage write failed", error);
   }
 }
 function getTodayKey() {
@@ -170,7 +171,7 @@ function applyTabBarTheme(mode) {
       }
     });
   } catch (error) {
-    common_vendor.index.__f__("warn", "at utils/app-state.js:205", "setTabBarStyle skipped", error);
+    common_vendor.index.__f__("warn", "at utils/app-state.js:206", "setTabBarStyle skipped", error);
   }
 }
 function ensureAppState() {
@@ -306,6 +307,20 @@ function submitCampusApplication(formData) {
 function getCampusApplications() {
   return getStoredApplications();
 }
+function getCampusApplicationDraft() {
+  return safeRead(APPLICATION_DRAFT_KEY, null);
+}
+function saveCampusApplicationDraft(formData) {
+  const draft = {
+    ...formData,
+    updatedAt: formatTimeLabel()
+  };
+  safeWrite(APPLICATION_DRAFT_KEY, draft);
+  return draft;
+}
+function clearCampusApplicationDraft() {
+  safeWrite(APPLICATION_DRAFT_KEY, "");
+}
 function getCanteenListByCampusName(campusName) {
   return common_data.campusCanteenMap[campusName] || [];
 }
@@ -339,10 +354,12 @@ function clearSelectedCanteen(campusId) {
   return [];
 }
 exports.applyTabBarTheme = applyTabBarTheme;
+exports.clearCampusApplicationDraft = clearCampusApplicationDraft;
 exports.clearSelectedCanteen = clearSelectedCanteen;
 exports.drawMealResult = drawMealResult;
 exports.ensureAppState = ensureAppState;
 exports.getAppState = getAppState;
+exports.getCampusApplicationDraft = getCampusApplicationDraft;
 exports.getCampusApplications = getCampusApplications;
 exports.getCampusById = getCampusById;
 exports.getCampusList = getCampusList;
@@ -352,6 +369,7 @@ exports.getSelectedCanteen = getSelectedCanteen;
 exports.getTheme = getTheme;
 exports.getTodayFortune = getTodayFortune;
 exports.saveAppState = saveAppState;
+exports.saveCampusApplicationDraft = saveCampusApplicationDraft;
 exports.saveSelectedCanteen = saveSelectedCanteen;
 exports.submitCampusApplication = submitCampusApplication;
 //# sourceMappingURL=../../.sourcemap/mp-weixin/utils/app-state.js.map

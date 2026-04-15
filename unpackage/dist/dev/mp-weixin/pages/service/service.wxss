@@ -28,8 +28,7 @@
   align-items: center;
   justify-content: space-between;
 }
-.back-text,
-.top-placeholder {
+.back-text, .top-placeholder {
   width: 120rpx;
   color: #8a7b6e;
   font-size: 28rpx;
@@ -39,22 +38,18 @@
   font-size: 34rpx;
   font-weight: 700;
 }
-.hero-card,
-.empty-card {
+.hero-card, .empty-card {
   margin-top: 28rpx;
   border-radius: 32rpx;
   padding: 30rpx;
 }
-.hero-title,
-.empty-title {
+.hero-title, .empty-title {
   display: block;
   color: #2f251d;
   font-size: 34rpx;
   font-weight: 700;
 }
-.hero-desc,
-.hero-tip,
-.empty-desc {
+.hero-desc, .hero-tip, .empty-desc {
   display: block;
   margin-top: 12rpx;
   color: #988d83;
@@ -66,7 +61,7 @@
   align-items: center;
   margin-top: 22rpx;
   padding: 12rpx 20rpx;
-  border-radius: 999rpx;
+  border-radius: 22rpx;
   background: rgba(255, 255, 255, 0.72);
 }
 .campus-badge__text {

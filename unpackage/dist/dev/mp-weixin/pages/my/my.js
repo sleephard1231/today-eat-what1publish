@@ -21,18 +21,18 @@ const _sfc_main = {
       pendingZodiac.value = state.value.profile.zodiac;
       utils_appState.applyTabBarTheme(state.value.mode);
     };
-    common_vendor.onLoad(() => {
-      refreshState();
-    });
-    common_vendor.onShow(() => {
-      refreshState();
-    });
+    common_vendor.onLoad(refreshState);
+    common_vendor.onShow(refreshState);
     const theme = common_vendor.computed(() => utils_appState.getTheme(state.value.mode));
     const currentCampus = common_vendor.computed(() => utils_appState.getCampusById(state.value.campusId));
     const currentMbtiCard = common_vendor.computed(() => common_data.mbtiCardOptions.find((item) => item.value === state.value.profile.mbti) || common_data.mbtiCardOptions[0]);
     const currentZodiacCard = common_vendor.computed(() => common_data.zodiacCardOptions.find((item) => item.value === state.value.profile.zodiac) || common_data.zodiacCardOptions[0]);
     const isCampusMode = common_vendor.computed(() => state.value.mode === "campus");
-    const campusDescription = common_vendor.computed(() => state.value.mode === "campus" ? `${currentCampus.value.name} · ${currentCampus.value.canteen || "校园版推荐"}` : "普通版已开启，推荐附近人气菜单");
+    const selectedCanteenText = common_vendor.computed(() => {
+      const selected = utils_appState.getSelectedCanteen(state.value.campusId);
+      return selected.length ? selected.map((item) => item.name).join("、") : "默认全校饭堂";
+    });
+    const campusDescription = common_vendor.computed(() => state.value.mode === "campus" ? selectedCanteenText.value : "普通版已开启，会优先推荐附近的人气选择。");
     const pageStyle = common_vendor.computed(() => ({
       minHeight: "100vh",
       padding: "0 32rpx 160rpx",
@@ -51,21 +51,22 @@ const _sfc_main = {
       background: `linear-gradient(135deg, ${theme.value.accent} 0%, ${theme.value.accentDeep} 100%)`,
       color: "#ffffff"
     }));
-    const accentTextStyle = common_vendor.computed(() => ({
-      color: theme.value.accent
-    }));
+    const accentTextStyle = common_vendor.computed(() => ({ color: theme.value.accent }));
     const modePillStyle = common_vendor.computed(() => ({
       color: theme.value.accent,
       background: theme.value.accentSoft,
       border: `1px solid ${theme.value.border}`
     }));
-    const pickerChipStyle = common_vendor.computed(() => ({
-      color: theme.value.accent
-    }));
+    const pickerChipStyle = common_vendor.computed(() => ({ color: theme.value.accent }));
     const serviceEntryStyle = common_vendor.computed(() => ({
       background: `linear-gradient(135deg, ${theme.value.cardStrong} 0%, ${theme.value.card} 100%)`,
       boxShadow: theme.value.shadow,
       border: `1px solid ${theme.value.border}`
+    }));
+    const serviceEntryActionStyle = common_vendor.computed(() => ({
+      background: `linear-gradient(135deg, ${theme.value.accent} 0%, ${theme.value.accentDeep} 100%)`,
+      boxShadow: theme.value.shadow,
+      color: "#ffffff"
     }));
     function selectorCardStyle(isActive) {
       return {
@@ -75,24 +76,16 @@ const _sfc_main = {
       };
     }
     function selectorTitleStyle(isActive) {
-      return {
-        color: isActive ? "#ffffff" : "#33271f"
-      };
+      return { color: isActive ? "#ffffff" : "#33271f" };
     }
     function selectorSubStyle(isActive) {
-      return {
-        color: isActive ? "rgba(255,255,255,0.92)" : "#7f6f63"
-      };
+      return { color: isActive ? "rgba(255,255,255,0.92)" : "#7f6f63" };
     }
     function selectorAliasStyle(isActive) {
-      return {
-        color: isActive ? "rgba(255,255,255,0.82)" : "#a59487"
-      };
+      return { color: isActive ? "rgba(255,255,255,0.82)" : "#a59487" };
     }
     function cardEntranceStyle(index) {
-      return {
-        animationDelay: `${index * 100}ms`
-      };
+      return { animationDelay: `${index * 100}ms` };
     }
     function openMbtiPopup() {
       pendingMbti.value = state.value.profile.mbti;
@@ -119,100 +112,79 @@ const _sfc_main = {
       showZodiacPopup.value = false;
     }
     function handleMbtiChange(nextMbti) {
-      state.value = utils_appState.saveAppState({
-        profile: {
-          mbti: nextMbti
-        }
-      });
+      state.value = utils_appState.saveAppState({ profile: { mbti: nextMbti } });
       pendingMbti.value = nextMbti;
-      common_vendor.index.showToast({
-        title: `MBTI 已切到 ${nextMbti}`,
-        icon: "none"
-      });
+      common_vendor.index.showToast({ title: `MBTI 已切换为 ${nextMbti}`, icon: "none" });
     }
     function handleZodiacChange(nextZodiac) {
-      state.value = utils_appState.saveAppState({
-        profile: {
-          zodiac: nextZodiac
-        }
-      });
+      state.value = utils_appState.saveAppState({ profile: { zodiac: nextZodiac } });
       pendingZodiac.value = nextZodiac;
-      common_vendor.index.showToast({
-        title: `星座已切到 ${nextZodiac}`,
-        icon: "none"
-      });
+      common_vendor.index.showToast({ title: `星座已切换为 ${nextZodiac}`, icon: "none" });
     }
     function goCampusPage() {
-      common_vendor.index.navigateTo({
-        url: "/pages/campus/select"
-      });
+      common_vendor.index.navigateTo({ url: "/pages/campus/select" });
     }
     function goHistoryPage() {
-      common_vendor.index.navigateTo({
-        url: "/pages/history/index"
-      });
+      common_vendor.index.navigateTo({ url: "/pages/history/index" });
     }
     function goCanteenPage() {
-      common_vendor.index.navigateTo({
-        url: "/pages/canteen/canteen"
-      });
+      common_vendor.index.navigateTo({ url: "/pages/canteen/canteen" });
     }
     function goServicePage() {
-      common_vendor.index.navigateTo({
-        url: "/pages/service/service"
-      });
+      common_vendor.index.navigateTo({ url: "/pages/service/service" });
     }
     function goJoinPage() {
-      common_vendor.index.navigateTo({
-        url: "/pages/campus/join"
-      });
+      common_vendor.index.navigateTo({ url: "/pages/campus/join" });
     }
     return (_ctx, _cache) => {
       return common_vendor.e({
         a: common_vendor.s(accentFillStyle.value),
         b: common_vendor.t(state.value.profile.nickname),
-        c: common_vendor.t(state.value.profile.zodiac),
-        d: common_vendor.t(currentMbtiCard.value.emoji),
-        e: common_vendor.t(currentMbtiCard.value.value),
-        f: common_vendor.t(currentMbtiCard.value.funAlias),
-        g: common_vendor.s(pickerChipStyle.value),
-        h: common_vendor.o(openMbtiPopup, "ee"),
-        i: common_vendor.t(currentZodiacCard.value.emoji),
-        j: common_vendor.t(currentZodiacCard.value.value),
-        k: common_vendor.t(currentZodiacCard.value.funAlias),
-        l: common_vendor.s(pickerChipStyle.value),
-        m: common_vendor.o(openZodiacPopup, "b3"),
-        n: common_vendor.s(cardStyle.value),
-        o: common_vendor.s({
+        c: common_vendor.t(currentMbtiCard.value.emoji),
+        d: common_vendor.t(currentMbtiCard.value.value),
+        e: common_vendor.t(currentMbtiCard.value.funAlias),
+        f: common_vendor.s(pickerChipStyle.value),
+        g: common_vendor.o(openMbtiPopup, "8c"),
+        h: common_vendor.t(currentZodiacCard.value.emoji),
+        i: common_vendor.t(currentZodiacCard.value.value),
+        j: common_vendor.t(currentZodiacCard.value.funAlias),
+        k: common_vendor.s(pickerChipStyle.value),
+        l: common_vendor.o(openZodiacPopup, "05"),
+        m: common_vendor.s(cardStyle.value),
+        n: common_vendor.s({
           marginTop: `${common_vendor.unref(statusBarHeight) + 16}px`
         }),
-        p: common_vendor.t(theme.value.name),
-        q: common_vendor.s(modePillStyle.value),
-        r: common_vendor.t(campusDescription.value),
-        s: common_vendor.s(accentTextStyle.value),
-        t: common_vendor.o(goCampusPage, "79"),
-        v: common_vendor.s(cardStyle.value),
-        w: isCampusMode.value
+        o: isCampusMode.value
       }, isCampusMode.value ? {
-        x: common_vendor.s(accentTextStyle.value),
-        y: common_vendor.o(goCanteenPage, "6d")
+        p: common_vendor.s(modePillStyle.value)
       } : {}, {
-        z: common_vendor.t(historyCount.value),
-        A: common_vendor.s(accentFillStyle.value),
-        B: common_vendor.o(goHistoryPage, "85"),
-        C: common_vendor.t(applicationCount.value),
-        D: common_vendor.s(accentTextStyle.value),
-        E: common_vendor.o(goJoinPage, "4d"),
-        F: common_vendor.s(cardStyle.value),
-        G: isCampusMode.value
+        q: isCampusMode.value
       }, isCampusMode.value ? {
-        H: common_vendor.t(currentCampus.value.name),
-        I: common_vendor.s(serviceEntryStyle.value),
-        J: common_vendor.o(goServicePage, "d5")
+        r: common_vendor.t(currentCampus.value.name)
       } : {}, {
-        K: showMbtiPopup.value
+        s: common_vendor.t(campusDescription.value),
+        t: common_vendor.s(accentTextStyle.value),
+        v: common_vendor.o(goCampusPage, "75"),
+        w: common_vendor.s(cardStyle.value),
+        x: common_vendor.t(historyCount.value),
+        y: common_vendor.s(accentFillStyle.value),
+        z: common_vendor.o(goHistoryPage, "63"),
+        A: common_vendor.s(cardStyle.value),
+        B: isCampusMode.value
+      }, isCampusMode.value ? {
+        C: common_vendor.s(accentTextStyle.value),
+        D: common_vendor.o(goCanteenPage, "c0"),
+        E: common_vendor.t(applicationCount.value),
+        F: common_vendor.s(accentFillStyle.value),
+        G: common_vendor.o(goJoinPage, "bd"),
+        H: common_vendor.s(cardStyle.value),
+        I: common_vendor.s(serviceEntryActionStyle.value),
+        J: common_vendor.s(serviceEntryStyle.value),
+        K: common_vendor.o(goServicePage, "74")
+      } : {}, {
+        L: showMbtiPopup.value
       }, showMbtiPopup.value ? {
-        L: common_vendor.f(common_vendor.unref(common_data.mbtiCardOptions), (item, index, i0) => {
+        M: common_vendor.f(common_vendor.unref(common_data.mbtiCardOptions), (item, index, i0) => {
           return {
             a: common_vendor.t(item.emoji),
             b: common_vendor.t(item.value),
@@ -227,17 +199,17 @@ const _sfc_main = {
             k: common_vendor.o(($event) => pendingMbti.value = item.value, item.value)
           };
         }),
-        M: common_vendor.o(cancelMbtiSelection, "ea"),
-        N: common_vendor.s(accentFillStyle.value),
-        O: common_vendor.o(confirmMbtiSelection, "b3"),
-        P: common_vendor.s(sheetStyle.value),
-        Q: common_vendor.o(() => {
-        }, "24"),
-        R: common_vendor.o(cancelMbtiSelection, "c9")
+        N: common_vendor.o(cancelMbtiSelection, "fa"),
+        O: common_vendor.s(accentFillStyle.value),
+        P: common_vendor.o(confirmMbtiSelection, "ce"),
+        Q: common_vendor.s(sheetStyle.value),
+        R: common_vendor.o(() => {
+        }, "1d"),
+        S: common_vendor.o(cancelMbtiSelection, "b6")
       } : {}, {
-        S: showZodiacPopup.value
+        T: showZodiacPopup.value
       }, showZodiacPopup.value ? {
-        T: common_vendor.f(common_vendor.unref(common_data.zodiacCardOptions), (item, index, i0) => {
+        U: common_vendor.f(common_vendor.unref(common_data.zodiacCardOptions), (item, index, i0) => {
           return {
             a: common_vendor.t(item.emoji),
             b: common_vendor.t(item.value),
@@ -252,15 +224,15 @@ const _sfc_main = {
             k: common_vendor.o(($event) => pendingZodiac.value = item.value, item.value)
           };
         }),
-        U: common_vendor.o(cancelZodiacSelection, "e3"),
-        V: common_vendor.s(accentFillStyle.value),
-        W: common_vendor.o(confirmZodiacSelection, "40"),
-        X: common_vendor.s(sheetStyle.value),
-        Y: common_vendor.o(() => {
-        }, "22"),
-        Z: common_vendor.o(cancelZodiacSelection, "1d")
+        V: common_vendor.o(cancelZodiacSelection, "3b"),
+        W: common_vendor.s(accentFillStyle.value),
+        X: common_vendor.o(confirmZodiacSelection, "d6"),
+        Y: common_vendor.s(sheetStyle.value),
+        Z: common_vendor.o(() => {
+        }, "57"),
+        aa: common_vendor.o(cancelZodiacSelection, "21")
       } : {}, {
-        aa: common_vendor.s(pageStyle.value)
+        ab: common_vendor.s(pageStyle.value)
       });
     };
   }

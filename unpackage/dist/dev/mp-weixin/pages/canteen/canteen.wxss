@@ -28,8 +28,7 @@
   align-items: center;
   justify-content: space-between;
 }
-.back-text,
-.top-placeholder {
+.back-text, .top-placeholder {
   width: 120rpx;
   color: #8a7b6e;
   font-size: 28rpx;
@@ -39,30 +38,59 @@
   font-size: 34rpx;
   font-weight: 700;
 }
-.hero-card,
-.section-card {
+.hero-card {
   margin-top: 28rpx;
   border-radius: 32rpx;
   padding: 30rpx;
 }
-.hero-title,
-.section-title {
+.hero-title, .section-title {
   display: block;
   color: #2f251d;
   font-size: 34rpx;
   font-weight: 700;
 }
 .section-title--inside {
-  margin-top: 28rpx;
+  margin-top: 26rpx;
 }
-.hero-desc,
-.hero-tip,
-.section-desc,
-.empty-desc {
+.hero-desc, .hero-tip, .section-desc, .empty-desc {
   display: block;
   margin-top: 12rpx;
   color: #988d83;
   font-size: 26rpx;
+  line-height: 1.6;
+}
+.selection-state {
+  margin-top: 24rpx;
+  border-radius: 24rpx;
+  padding: 22rpx 24rpx;
+}
+.selection-state__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16rpx;
+}
+.selection-state__title {
+  display: block;
+  color: #3c3027;
+  font-size: 28rpx;
+  font-weight: 700;
+}
+.selection-state__badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 88rpx;
+  padding: 8rpx 18rpx;
+  border-radius: 22rpx;
+  font-size: 22rpx;
+  font-weight: 700;
+}
+.selection-state__desc {
+  display: block;
+  margin-top: 10rpx;
+  color: #907f72;
+  font-size: 24rpx;
   line-height: 1.6;
 }
 .canteen-list {
@@ -71,18 +99,31 @@
 .canteen-card {
   border-radius: 28rpx;
   padding: 28rpx;
+  transition: all 0.2s ease;
+}
+.canteen-card + .canteen-card {
+  margin-top: 18rpx;
+}
+.canteen-card__glow {
+  position: absolute;
+  top: -50rpx;
+  right: -40rpx;
+  width: 180rpx;
+  height: 180rpx;
+  border-radius: 50%;
 }
 .canteen-card__head {
+  position: relative;
+  z-index: 1;
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
   gap: 16rpx;
 }
-.canteen-card + .canteen-card {
-  margin-top: 18rpx;
+.canteen-card__copy {
+  flex: 1;
 }
-.canteen-name,
-.empty-title {
+.canteen-name, .empty-title {
   display: block;
   font-size: 32rpx;
   font-weight: 700;
@@ -97,10 +138,9 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  min-width: 86rpx;
   padding: 10rpx 18rpx;
-  border-radius: 999rpx;
-  background: rgba(255, 255, 255, 0.2);
-  color: #ffffff;
+  border-radius: 22rpx;
   font-size: 22rpx;
   font-weight: 700;
 }
@@ -116,8 +156,7 @@
   gap: 18rpx;
   margin-top: 32rpx;
 }
-.clear-button,
-.save-button {
+.clear-button, .save-button {
   flex: 1;
   height: 92rpx;
   border-radius: 30rpx;

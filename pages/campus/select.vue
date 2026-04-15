@@ -528,7 +528,7 @@ function goBack() {
   align-items: center;
   justify-content: center;
   padding: 8rpx 16rpx;
-  border-radius: 999rpx;
+  border-radius: 22rpx;
   font-size: 20rpx;
   font-weight: 700;
 }

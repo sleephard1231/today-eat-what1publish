@@ -40,23 +40,29 @@
   font-weight: 700;
 }
 .intro-card,
+.status-card,
 .form-card {
   margin-top: 28rpx;
   border-radius: 32rpx;
   padding: 30rpx;
 }
-.intro-title {
+.intro-title,
+.status-title {
   display: block;
   color: #2f251d;
   font-size: 34rpx;
   font-weight: 700;
 }
-.intro-desc {
+.intro-desc,
+.status-desc {
   display: block;
   margin-top: 12rpx;
   color: #998d83;
   font-size: 26rpx;
   line-height: 1.7;
+}
+.status-title {
+  color: #ff7a2f;
 }
 .field + .field {
   margin-top: 26rpx;

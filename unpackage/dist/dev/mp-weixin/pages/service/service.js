@@ -10,12 +10,8 @@ const _sfc_main = {
     const refreshPage = () => {
       state.value = utils_appState.getAppState();
     };
-    common_vendor.onLoad(() => {
-      refreshPage();
-    });
-    common_vendor.onShow(() => {
-      refreshPage();
-    });
+    common_vendor.onLoad(refreshPage);
+    common_vendor.onShow(refreshPage);
     const isCampusMode = common_vendor.computed(() => state.value.mode === "campus");
     const theme = common_vendor.computed(() => utils_appState.getTheme(state.value.mode));
     const currentCampus = common_vendor.computed(() => utils_appState.getCampusById(state.value.campusId));
@@ -41,8 +37,8 @@ const _sfc_main = {
       return common_vendor.e({
         a: common_vendor.o(goBack, "ca"),
         b: `${common_vendor.unref(statusBarHeight) + 12}px`,
-        c: common_vendor.t(isCampusMode.value ? `当前学校：${currentCampus.value.name}` : "当前是普通模式"),
-        d: common_vendor.t(isCampusMode.value ? "会根据你当前选择的学校，自动匹配对应的校园生活服务。" : "切换到校园模式后，这里才会显示学校专属服务内容。"),
+        c: common_vendor.t(isCampusMode.value ? `当前学校：${currentCampus.value.name}` : "当前还是普通模式"),
+        d: common_vendor.t(isCampusMode.value ? "会按你当前选择的学校，自动展示对应的校园服务。" : "切换到校园模式后，这里才会出现学校专属服务。"),
         e: isCampusMode.value
       }, isCampusMode.value ? {
         f: common_vendor.t(currentCampus.value.name)
@@ -61,8 +57,8 @@ const _sfc_main = {
         j: common_vendor.s(iconWrapStyle.value),
         k: common_vendor.s(cardStyle.value)
       } : {
-        l: common_vendor.t(isCampusMode.value ? "当前学校暂未配置校园服务" : "校园服务仅在校园模式开放"),
-        m: common_vendor.t(isCampusMode.value ? "后面接入后台后，这里会按学校动态返回服务列表。" : "你可以先去校园切换页开启校园版，再回来查看校园专属服务。"),
+        l: common_vendor.t(isCampusMode.value ? "这所学校暂时还没有校园服务" : "校园服务仅在校园模式下显示"),
+        m: common_vendor.t(isCampusMode.value ? "后面接入后台后，这里会按学校自动补齐更多服务内容。" : "你可以先去切换校园版，再回来看看学校专属服务。"),
         n: common_vendor.s(cardStyle.value)
       }, {
         o: common_vendor.s(pageStyle.value)
