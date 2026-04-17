@@ -23,6 +23,60 @@
 /* 垂直间距 */
 /* 透明度 */
 /* 文章场景相关 */
+.press-feedback {
+  transform: scale(1);
+  transform-origin: center;
+  transition: transform 0.16s ease, opacity 0.16s ease, filter 0.16s ease;
+  will-change: transform;
+}
+.press-feedback--active {
+  transform: scale(0.98);
+  opacity: 0.96;
+  filter: saturate(1.02);
+}
+button,
+.back-text,
+.chip,
+.picker-item,
+.row-item,
+.service-entry,
+.select-card,
+.mode-card,
+.school-group__header,
+.campus-option,
+.join-card,
+.canteen-card,
+.clear-button,
+.save-button,
+.submit-button,
+.eat-button,
+.result-popup__button {
+  transform: scale(1);
+  transform-origin: center;
+  transition: transform 0.16s ease, opacity 0.16s ease, filter 0.16s ease;
+  will-change: transform;
+}
+button:active,
+.back-text:active,
+.chip:active,
+.picker-item:active,
+.row-item:active,
+.service-entry:active,
+.select-card:active,
+.mode-card:active,
+.school-group__header:active,
+.campus-option:active,
+.join-card:active,
+.canteen-card:active,
+.clear-button:active,
+.save-button:active,
+.submit-button:active,
+.eat-button:active,
+.result-popup__button:active {
+  transform: scale(0.98);
+  opacity: 0.96;
+  filter: saturate(1.02);
+}
 .profile-card, .section-card {
   border-radius: 34rpx;
   padding: 30rpx;

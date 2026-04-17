@@ -23,7 +23,6 @@ const _sfc_main = {
     const theme = common_vendor.computed(() => utils_appState.getTheme(state.value.mode));
     const fortune = common_vendor.computed(() => utils_appState.getTodayFortune(state.value));
     const currentCampus = common_vendor.computed(() => utils_appState.getCampusById(state.value.campusId));
-    const servedCountText = common_vendor.computed(() => `${state.value.stats.servedCount}`.replace(/\B(?=(\d{3})+(?!\d))/g, ","));
     const campusChipIcon = common_vendor.computed(() => state.value.mode === "campus" ? "🏫" : "🍃");
     const campusChipLabel = common_vendor.computed(() => state.value.mode === "campus" ? currentCampus.value.name : "普通版");
     function getLevelProgress(label, labels) {
@@ -191,31 +190,30 @@ const _sfc_main = {
         E: common_vendor.s(cardStyle.value),
         F: common_vendor.s(accentFillStyle.value),
         G: common_vendor.o(handleDrawMeal, "8a"),
-        H: common_vendor.t(servedCountText.value),
-        I: isDrawing.value
+        H: isDrawing.value
       }, isDrawing.value ? {
-        J: common_vendor.s(accentFillStyle.value),
-        K: common_vendor.s(cardStyle.value)
+        I: common_vendor.s(accentFillStyle.value),
+        J: common_vendor.s(cardStyle.value)
       } : {}, {
-        L: showResultPopup.value && popupResult.value
+        K: showResultPopup.value && popupResult.value
       }, showResultPopup.value && popupResult.value ? {
-        M: common_vendor.t(state.value.mode === "campus" ? "校园版推荐" : "普通版推荐"),
-        N: common_vendor.t(popupResult.value.createdAt),
-        O: common_vendor.t(popupResult.value.mealName),
-        P: common_vendor.t(popupResult.value.vibe),
-        Q: popupRevealStage.value >= 1 ? 1 : "",
-        R: common_vendor.t(popupResult.value.campusName),
-        S: common_vendor.t(popupResult.value.canteen),
-        T: common_vendor.t(popupRevealReason.value),
-        U: popupRevealStage.value >= 2 ? 1 : "",
-        V: common_vendor.s(accentFillStyle.value),
-        W: common_vendor.o(closeResultPopup, "61"),
-        X: common_vendor.s(popupCardStyle.value),
-        Y: common_vendor.o(() => {
-        }, "64"),
-        Z: common_vendor.o(closeResultPopup, "02")
+        L: common_vendor.t(state.value.mode === "campus" ? "校园版推荐" : "普通版推荐"),
+        M: common_vendor.t(popupResult.value.createdAt),
+        N: common_vendor.t(popupResult.value.mealName),
+        O: common_vendor.t(popupResult.value.vibe),
+        P: popupRevealStage.value >= 1 ? 1 : "",
+        Q: common_vendor.t(popupResult.value.campusName),
+        R: common_vendor.t(popupResult.value.canteen),
+        S: common_vendor.t(popupRevealReason.value),
+        T: popupRevealStage.value >= 2 ? 1 : "",
+        U: common_vendor.s(accentFillStyle.value),
+        V: common_vendor.o(closeResultPopup, "c7"),
+        W: common_vendor.s(popupCardStyle.value),
+        X: common_vendor.o(() => {
+        }, "2d"),
+        Y: common_vendor.o(closeResultPopup, "95")
       } : {}, {
-        aa: common_vendor.s(pageStyle.value)
+        Z: common_vendor.s(pageStyle.value)
       });
     };
   }

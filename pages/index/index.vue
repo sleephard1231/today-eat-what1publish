@@ -71,15 +71,6 @@
       <text class="eat-button__label">吃什么</text>
     </button>
 
-    <view class="proof-row">
-      <text>🍜</text>
-      <text>🍛</text>
-      <text>🍚</text>
-      <text>🥗</text>
-      <text>🌮</text>
-    </view>
-    <text class="proof-text">已经陪 {{ servedCountText }} 位同学挑过今天这一口 ✨</text>
-
     <view v-if="isDrawing" class="draw-mask">
       <view class="draw-panel" :style="cardStyle">
         <view class="draw-orbit">
@@ -146,7 +137,6 @@ let chipBounceTimer = null
 const theme = computed(() => getTheme(state.value.mode))
 const fortune = computed(() => getTodayFortune(state.value))
 const currentCampus = computed(() => getCampusById(state.value.campusId))
-const servedCountText = computed(() => `${state.value.stats.servedCount}`.replace(/\B(?=(\d{3})+(?!\d))/g, ','))
 const campusChipIcon = computed(() => (state.value.mode === 'campus' ? '🏫' : '🍃'))
 const campusChipLabel = computed(() => (state.value.mode === 'campus' ? currentCampus.value.name : '普通版'))
 
@@ -343,8 +333,7 @@ onUnload(() => {
 .fortune-tip { display: flex; justify-content: space-between; margin-top: 28rpx; padding-top: 24rpx; border-top: 2rpx solid rgba(255,255,255,0.65); color: #907f72; font-size: 24rpx; }
 .eat-button { width: 100%; margin-top: 32rpx; border-radius: 30rpx; padding: 30rpx 0; text-align: center; }
 .eat-button__label { color: #ffffff; font-size: 40rpx; font-weight: 700; letter-spacing: 8rpx; }
-.proof-row { display: flex; justify-content: center; gap: 28rpx; margin-top: 34rpx; font-size: 38rpx; }
-.proof-text { display: block; margin-top: 18rpx; text-align: center; color: #a5988e; font-size: 26rpx; }
+
 .draw-mask, .result-popup-mask { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; padding: 32rpx; background: rgba(48,34,21,0.32); backdrop-filter: blur(10rpx); z-index: 999; }
 .draw-panel { width: 100%; max-width: 640rpx; padding: 52rpx 34rpx; border-radius: 40rpx; text-align: center; }
 .draw-orbit { position: relative; width: 260rpx; height: 260rpx; margin: 0 auto; }
