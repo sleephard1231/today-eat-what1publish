@@ -35,9 +35,10 @@
         </view>
       </view>
 
-      <view v-else class="empty-card">
-        <text class="empty-title">这所学校还没有配置饭堂数据</text>
-        <text class="empty-desc">后面接入后台后，这里会按学校自动展示对应饭堂。</text>
+      <view v-else class="empty-card" :style="cardStyle">
+        <text class="empty-icon">🏪</text>
+        <text class="empty-title">这里暂时没有饭堂数据</text>
+        <text class="empty-desc">接入后台后会自动展示</text>
       </view>
     </view>
 
@@ -111,8 +112,8 @@ const cardStyle = computed(() => ({
   border: `1px solid ${theme.value.border}`
 }))
 
-const selectionAccent = computed(() => (state.value.mode === 'campus' ? '#2e9f82' : '#ff7a2f'))
-const selectionSoft = computed(() => (state.value.mode === 'campus' ? '#e8f5f2' : '#fff0df'))
+const selectionAccent = computed(() => theme.value.accent)
+const selectionSoft = computed(() => theme.value.accentSoft)
 
 const selectionStateStyle = computed(() => ({
   background: hasPendingChanges.value ? selectionSoft.value : 'rgba(255, 255, 255, 0.82)',
@@ -132,9 +133,7 @@ const ghostButtonStyle = computed(() => ({
 }))
 
 const canteenGlowStyle = computed(() => ({
-  background: state.value.mode === 'campus'
-    ? 'radial-gradient(circle, rgba(103, 182, 160, 0.18) 0%, rgba(103, 182, 160, 0) 72%)'
-    : 'radial-gradient(circle, rgba(255, 156, 91, 0.24) 0%, rgba(255, 156, 91, 0) 72%)'
+  background: `radial-gradient(circle, ${theme.value.accent}30 0%, ${theme.value.accent}00 72%)`
 }))
 
 const saveButtonStyle = computed(() => ({
@@ -245,7 +244,8 @@ function goBack() {
 .canteen-name, .empty-title { display: block; font-size: 32rpx; font-weight: 700; }
 .canteen-remark { display: block; margin-top: 12rpx; font-size: 24rpx; line-height: 1.5; }
 .canteen-badge { display: inline-flex; align-items: center; justify-content: center; min-width: 86rpx; padding: 10rpx 18rpx; border-radius: 22rpx; font-size: 22rpx; font-weight: 700; }
-.empty-card { margin-top: 22rpx; border-radius: 24rpx; padding: 28rpx; background: rgba(255,255,255,0.82); text-align: center; }
+.empty-card { margin-top: 22rpx; border-radius: 24rpx; padding: 48rpx 28rpx; text-align: center; }
+.empty-icon { display: block; font-size: 72rpx; margin-bottom: 20rpx; opacity: 0.7; }
 .action-row { display: flex; gap: 18rpx; margin-top: 32rpx; }
 .clear-button, .save-button { flex: 1; height: 92rpx; border-radius: 30rpx; text-align: center; line-height: 92rpx; font-size: 30rpx; font-weight: 700; }
 </style>

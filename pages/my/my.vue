@@ -1,11 +1,20 @@
 <template>
   <view class="page" :style="pageStyle">
-    <view class="profile-card profile-card--top" :style="[cardStyle, { marginTop: `${statusBarHeight + 16}px` }]">
-      <view class="profile-top">
-        <view class="avatar" :style="accentFillStyle">🍚</view>
+    <view class="profile-card profile-card--top" :style="[cardStyle, { marginTop: `${topCardMargin}px` }]">
+      <!-- 点击头像/昵称区域：已登录则打开资料编辑 sheet，未登录则打开登录 sheet -->
+      <view class="profile-top press-feedback" @click="handleProfileAreaClick">
+        <view class="avatar-shell" :style="avatarShellStyle">
+          <image
+            v-if="user.avatar"
+            class="avatar avatar--img"
+            :src="user.avatar"
+            mode="aspectFill"
+          />
+          <view v-else class="avatar" :style="accentFillStyle">🍚</view>
+        </view>
         <view class="profile-copy">
-          <text class="nickname">{{ state.profile.nickname }}的干饭人主页</text>
-          <text class="signature">把偏好和校园设置好，今天吃什么就会更准一点。</text>
+          <text class="nickname">{{ user.isLoggedIn ? user.nickname : '点击授权微信登录' }}</text>
+          <text class="profile-tagline">{{ profileHeadline }}</text>
         </view>
       </view>
 
@@ -19,6 +28,7 @@
             </view>
           </view>
         </view>
+
         <view class="picker-item press-feedback" hover-class="press-feedback--active" hover-start-time="20" hover-stay-time="90" @click="openZodiacPopup">
           <view class="picker-chip picker-chip--detail" :style="pickerChipStyle">
             <text class="picker-chip__emoji">{{ currentZodiacCard.emoji }}</text>
@@ -50,8 +60,8 @@
     <view class="section-card" :style="cardStyle">
       <view class="row-item press-feedback" hover-class="press-feedback--active" hover-start-time="20" hover-stay-time="90" @click="goHistoryPage">
         <view>
-          <text class="row-title">🧾 占卜历史记录</text>
-          <text class="row-desc">看看最近都吃了什么，也方便回头翻一翻。</text>
+          <text class="row-title">📜 历史记录</text>
+          <text class="row-desc">看看最近都推荐过什么，回头翻一翻也更方便。</text>
         </view>
         <view class="count-badge" :style="accentFillStyle">{{ historyCount }}</view>
       </view>
@@ -81,18 +91,122 @@
         <view class="service-entry__copy">
           <text class="service-entry__eyebrow">🏫 校园专属服务</text>
           <text class="service-entry__title">按当前学校解锁对应服务</text>
-          <text class="service-entry__desc">会根据你选中的学校，自动显示可用的校园生活服务。</text>
+          <text class="service-entry__desc">按学校自动解锁专属服务</text>
         </view>
         <text class="service-entry__action" :style="serviceEntryActionStyle">进入</text>
       </view>
     </template>
 
+    <!-- 登录引导 sheet -->
+    <view v-if="showLoginSheet" class="sheet-mask" @click="closeLoginSheet">
+      <view class="sheet-panel sheet-panel--login" :style="sheetStyle" @click.stop>
+        <view class="sheet-handle"></view>
+        <view class="login-header">
+          <button class="login-avatar-btn" open-type="chooseAvatar" @chooseavatar="onChooseAvatar">
+            <view class="login-avatar-shell" :style="avatarShellStyle">
+              <image v-if="loginForm.avatar" class="avatar avatar--img" :src="loginForm.avatar" mode="aspectFill" />
+              <view v-else class="avatar" :style="accentFillStyle">🍚</view>
+            </view>
+            <text class="login-avatar-hint">点击选择头像</text>
+          </button>
+          <text class="login-title">欢迎来到吃什么</text>
+          <text class="login-desc">选择头像并填写昵称即可登录</text>
+        </view>
+        <view class="login-field">
+          <text class="login-field__label">昵称</text>
+          <input
+            type="nickname"
+            class="login-field__input"
+            placeholder="请输入昵称"
+            placeholder-style="color:#b7ada4;font-size:26rpx;"
+            :value="loginForm.nickname"
+            @blur="onNicknameInput"
+          />
+        </view>
+        <button
+          class="login-button press-feedback"
+          :style="accentFillStyle"
+          hover-class="press-feedback--active"
+          hover-start-time="20"
+          hover-stay-time="90"
+          :loading="isLoggingIn"
+          @click="handleLogin"
+        >
+          {{ isLoggingIn ? '登录中...' : '登录' }}
+        </button>
+      </view>
+    </view>
+
+    <!-- 个人资料编辑 sheet -->
+    <view v-if="showProfileSheet" class="sheet-mask" @click="closeProfileSheet">
+      <view class="sheet-panel" :style="sheetStyle" @click.stop>
+        <view class="sheet-handle"></view>
+        <text class="sheet-title">✨ 个人资料</text>
+
+        <!-- 头像 + 昵称 -->
+        <view class="profile-edit-row">
+          <button class="profile-edit-avatar-btn" open-type="chooseAvatar" @chooseavatar="onChooseAvatarEdit">
+            <image v-if="user.avatar" class="profile-edit-avatar" :src="user.avatar" mode="aspectFill" />
+            <view v-else class="profile-edit-avatar-placeholder" :style="accentFillStyle">🍚</view>
+          </button>
+          <view class="profile-edit-info">
+            <input
+              type="nickname"
+              class="profile-edit-nickname-input"
+              :value="user.nickname"
+              placeholder="点击修改昵称"
+              placeholder-style="color:#9f9388;font-size:26rpx;"
+              @blur="onNicknameEdit"
+            />
+          </view>
+        </view>
+
+        <view class="profile-edit-divider"></view>
+
+        <!-- MBTI + 星座 -->
+        <view class="profile-edit-pickers">
+          <view class="picker-item press-feedback" hover-class="press-feedback--active" hover-start-time="20" hover-stay-time="90" @click="openMbtiPopupFromSheet">
+            <view class="picker-chip picker-chip--detail" :style="pickerChipStyle">
+              <text class="picker-chip__emoji">{{ currentMbtiCard.emoji }}</text>
+              <view class="picker-chip__body">
+                <text class="picker-chip__title">{{ currentMbtiCard.value }}</text>
+                <text class="picker-chip__desc">{{ currentMbtiCard.funAlias }}</text>
+              </view>
+            </view>
+          </view>
+
+          <view class="picker-item press-feedback" hover-class="press-feedback--active" hover-start-time="20" hover-stay-time="90" @click="openZodiacPopupFromSheet">
+            <view class="picker-chip picker-chip--detail" :style="pickerChipStyle">
+              <text class="picker-chip__emoji">{{ currentZodiacCard.emoji }}</text>
+              <view class="picker-chip__body">
+                <text class="picker-chip__title">{{ currentZodiacCard.value }}</text>
+                <text class="picker-chip__desc">{{ currentZodiacCard.funAlias }}</text>
+              </view>
+            </view>
+          </view>
+        </view>
+
+        <!-- 退出登录 -->
+        <button class="logout-button press-feedback" :style="ghostButtonStyle" @click="handleLogout">退出登录</button>
+      </view>
+    </view>
+
+    <!-- MBTI 选择 sheet -->
     <view v-if="showMbtiPopup" class="sheet-mask" @click="cancelMbtiSelection">
       <view class="sheet-panel" :style="sheetStyle" @click.stop>
         <view class="sheet-handle"></view>
         <text class="sheet-title">✨ 选择你的专属人格</text>
         <view class="sheet-grid">
-          <view v-for="(item, index) in mbtiCardOptions" :key="item.value" class="select-card press-feedback" :style="[selectorCardStyle(pendingMbti === item.value), cardEntranceStyle(index)]" hover-class="press-feedback--active" hover-start-time="20" hover-stay-time="90" @click="pendingMbti = item.value">
+          <view
+            v-for="(item, index) in mbtiCardOptions"
+            :key="item.value"
+            class="select-card press-feedback"
+            :style="[selectorCardStyle(pendingMbti === item.value), cardEntranceStyle(index)]"
+            hover-class="press-feedback--active"
+            hover-start-time="20"
+            hover-stay-time="90"
+            @click="pendingMbti = item.value"
+          >
             <text class="select-card__emoji">{{ item.emoji }}</text>
             <text class="select-card__title" :style="selectorTitleStyle(pendingMbti === item.value)">{{ item.value }}</text>
             <text class="select-card__official" :style="selectorSubStyle(pendingMbti === item.value)">{{ item.officialName }}</text>
@@ -106,12 +220,22 @@
       </view>
     </view>
 
+    <!-- 星座选择 sheet -->
     <view v-if="showZodiacPopup" class="sheet-mask" @click="cancelZodiacSelection">
       <view class="sheet-panel" :style="sheetStyle" @click.stop>
         <view class="sheet-handle"></view>
         <text class="sheet-title">✨ 选择你的星座气质</text>
         <view class="sheet-grid">
-          <view v-for="(item, index) in zodiacCardOptions" :key="item.value" class="select-card press-feedback" :style="[selectorCardStyle(pendingZodiac === item.value), cardEntranceStyle(index)]" hover-class="press-feedback--active" hover-start-time="20" hover-stay-time="90" @click="pendingZodiac = item.value">
+          <view
+            v-for="(item, index) in zodiacCardOptions"
+            :key="item.value"
+            class="select-card press-feedback"
+            :style="[selectorCardStyle(pendingZodiac === item.value), cardEntranceStyle(index)]"
+            hover-class="press-feedback--active"
+            hover-start-time="20"
+            hover-stay-time="90"
+            @click="pendingZodiac = item.value"
+          >
             <text class="select-card__emoji">{{ item.emoji }}</text>
             <text class="select-card__title" :style="selectorTitleStyle(pendingZodiac === item.value)">{{ item.value }}</text>
             <text class="select-card__official" :style="selectorSubStyle(pendingZodiac === item.value)">{{ item.officialName }}</text>
@@ -128,22 +252,44 @@
 </template>
 
 <script setup>
-import { computed, ref } from 'vue'
-import { onLoad, onShow } from '@dcloudio/uni-app'
+import { computed, reactive, ref } from 'vue'
+import { onLoad, onShow, onUnload } from '@dcloudio/uni-app'
 import { mbtiCardOptions, zodiacCardOptions } from '@/common/data.js'
-import { applyTabBarTheme, getAppState, getCampusApplications, getCampusById, getHistoryList, getSelectedCanteen, getTheme, saveAppState } from '@/utils/app-state.js'
+import {
+  applyTabBarTheme,
+  getAppState,
+  getCampusApplications,
+  getCampusById,
+  getHistoryList,
+  getSelectedCanteen,
+  getTheme,
+  saveAppState
+} from '@/utils/app-state.js'
+import { getUser, saveUser, clearUser } from '@/utils/user-state.js'
 
 const statusBarHeight = uni.getSystemInfoSync().statusBarHeight || 20
+const menuButtonRect = typeof uni.getMenuButtonBoundingClientRect === 'function'
+  ? uni.getMenuButtonBoundingClientRect()
+  : null
 const state = ref(getAppState())
+const user = ref(getUser())
 const historyCount = ref(0)
 const applicationCount = ref(0)
 const showMbtiPopup = ref(false)
 const showZodiacPopup = ref(false)
+const showProfileSheet = ref(false)
+const showLoginSheet = ref(false)
+const isLoggingIn = ref(false)
+const loginForm = reactive({
+  avatar: '',
+  nickname: ''
+})
 const pendingMbti = ref(state.value.profile.mbti)
 const pendingZodiac = ref(state.value.profile.zodiac)
 
-const refreshState = () => {
+function refreshState() {
   state.value = getAppState()
+  user.value = getUser()
   historyCount.value = getHistoryList().length
   applicationCount.value = getCampusApplications().length
   pendingMbti.value = state.value.profile.mbti
@@ -151,14 +297,35 @@ const refreshState = () => {
   applyTabBarTheme(state.value.mode)
 }
 
-onLoad(refreshState)
+function onUserStateChange() {
+  user.value = getUser()
+  refreshState()
+}
+
+onLoad(() => {
+  refreshState()
+  uni.$on('user-state-changed', onUserStateChange)
+  uni.$on('app-state-changed', refreshState)
+})
+
 onShow(refreshState)
+
+onUnload(() => {
+  uni.$off('user-state-changed', onUserStateChange)
+  uni.$off('app-state-changed', refreshState)
+})
 
 const theme = computed(() => getTheme(state.value.mode))
 const currentCampus = computed(() => getCampusById(state.value.campusId))
 const currentMbtiCard = computed(() => mbtiCardOptions.find((item) => item.value === state.value.profile.mbti) || mbtiCardOptions[0])
 const currentZodiacCard = computed(() => zodiacCardOptions.find((item) => item.value === state.value.profile.zodiac) || zodiacCardOptions[0])
 const isCampusMode = computed(() => state.value.mode === 'campus')
+const topCardMargin = computed(() => (
+  menuButtonRect
+    ? menuButtonRect.top + menuButtonRect.height + 8
+    : statusBarHeight + 42
+))
+const profileHeadline = computed(() => `${currentZodiacCard.value.value} · ${currentMbtiCard.value.funAlias}`)
 
 const selectedCanteenText = computed(() => {
   const selected = getSelectedCanteen(state.value.campusId)
@@ -166,7 +333,9 @@ const selectedCanteenText = computed(() => {
 })
 
 const campusDescription = computed(() => (
-  state.value.mode === 'campus' ? selectedCanteenText.value : '普通版已开启，会优先推荐附近的人气选择。'
+  state.value.mode === 'campus'
+    ? selectedCanteenText.value
+    : '普通版已开启，会优先推荐附近的人气选择。'
 ))
 
 const pageStyle = computed(() => ({
@@ -213,6 +382,20 @@ const serviceEntryActionStyle = computed(() => ({
   color: '#ffffff'
 }))
 
+const avatarShellStyle = computed(() => ({
+  background: theme.value.accentSoft,
+  border: `2rpx solid ${theme.value.border}`,
+  boxShadow: state.value.mode === 'campus'
+    ? '0 10rpx 24rpx rgba(103, 182, 160, 0.18)'
+    : '0 10rpx 24rpx rgba(255, 138, 61, 0.16)'
+}))
+
+const ghostButtonStyle = computed(() => ({
+  background: theme.value.accentSoft,
+  color: theme.value.accent,
+  border: `1px solid ${theme.value.border}`
+}))
+
 function selectorCardStyle(isActive) {
   return {
     background: isActive ? `linear-gradient(135deg, ${theme.value.accent} 0%, ${theme.value.accentDeep} 100%)` : theme.value.accentSoft,
@@ -235,6 +418,119 @@ function selectorAliasStyle(isActive) {
 
 function cardEntranceStyle(index) {
   return { animationDelay: `${index * 100}ms` }
+}
+
+// 头像/昵称区域点击
+function handleProfileAreaClick() {
+  if (user.value.isLoggedIn) {
+    showProfileSheet.value = true
+  } else {
+    showLoginSheet.value = true
+  }
+}
+
+function closeLoginSheet() {
+  showLoginSheet.value = false
+}
+
+function closeProfileSheet() {
+  showProfileSheet.value = false
+}
+
+function onChooseAvatar(e) {
+  loginForm.avatar = e.detail.avatarUrl || ''
+}
+
+function onNicknameInput(e) {
+  loginForm.nickname = e.detail.value || ''
+}
+
+async function handleLogin() {
+  if (isLoggingIn.value) return
+
+  if (!loginForm.nickname.trim()) {
+    uni.showToast({ title: '请填写昵称', icon: 'none' })
+    return
+  }
+
+  isLoggingIn.value = true
+  try {
+    const mockOpenId = `local_openid_${Date.now()}`
+    const mockToken = `local_token_${Date.now()}`
+
+    saveUser({
+      openId: mockOpenId,
+      sessionKey: '',
+      token: mockToken,
+      nickname: loginForm.nickname.trim(),
+      avatar: loginForm.avatar
+    })
+    saveAppState({
+      profile: {
+        nickname: loginForm.nickname.trim(),
+        avatar: loginForm.avatar,
+        openId: mockOpenId
+      }
+    })
+
+    user.value = getUser()
+    state.value = getAppState()
+    showLoginSheet.value = false
+    uni.showToast({ title: '登录成功', icon: 'none' })
+  } catch (error) {
+    console.warn('handleLogin failed', error)
+    uni.showToast({ title: '登录失败，请重试', icon: 'none' })
+  } finally {
+    isLoggingIn.value = false
+  }
+}
+
+function handleLogout() {
+  uni.showModal({
+    title: '确定退出登录？',
+    content: '退出后你的个性化推荐记录会保留',
+    confirmText: '退出',
+    success: (res) => {
+      if (res.confirm) {
+        clearUser()
+        showProfileSheet.value = false
+        uni.showToast({ title: '已退出登录', icon: 'none' })
+      }
+    }
+  })
+}
+
+function onChooseAvatarEdit(e) {
+  const avatarUrl = e.detail.avatarUrl || ''
+  if (avatarUrl) {
+    saveUser({ avatar: avatarUrl })
+    saveAppState({ profile: { avatar: avatarUrl } })
+    user.value = getUser()
+    uni.showToast({ title: '头像已更新', icon: 'none' })
+  }
+}
+
+function onNicknameEdit(e) {
+  const newNickname = (e.detail.value || '').trim()
+  if (newNickname && newNickname !== user.value.nickname) {
+    saveUser({ nickname: newNickname })
+    saveAppState({ profile: { nickname: newNickname } })
+    user.value = getUser()
+    uni.showToast({ title: '昵称已更新', icon: 'none' })
+  }
+}
+
+// 以下是从 profile sheet 内部打开 MBTI/星座选择器
+function openMbtiPopupFromSheet() {
+  pendingMbti.value = state.value.profile.mbti
+  showProfileSheet.value = false
+  showMbtiPopup.value = true
+}
+
+function openZodiacPopupFromSheet() {
+  pendingZodiac.value = state.value.profile.zodiac
+  showProfileSheet.value = false
+  showZodiacPopup.value = true
 }
 
 function openMbtiPopup() {
@@ -303,7 +599,7 @@ function goJoinPage() {
 <style lang="scss">
 .profile-card, .section-card { border-radius: 34rpx; padding: 30rpx; }
 .profile-card--top { margin-top: 0; }
-.section-label { display: block; margin: 30rpx 6rpx 14rpx; color: #aa9c90; font-size: 22rpx; letter-spacing: 2rpx; }
+.section-label { display: block; margin: 22rpx 8rpx 12rpx; color: rgba(160, 149, 139, 0.78); font-size: 20rpx; letter-spacing: 1rpx; }
 .section-card { margin-top: 0; }
 .service-entry { display: flex; align-items: center; justify-content: space-between; gap: 24rpx; margin-top: 24rpx; border-radius: 34rpx; padding: 34rpx 30rpx; }
 .service-entry__copy { flex: 1; }
@@ -313,10 +609,12 @@ function goJoinPage() {
 .service-entry__desc { margin-top: 12rpx; color: #96897e; font-size: 25rpx; line-height: 1.6; }
 .service-entry__action { flex-shrink: 0; padding: 18rpx 24rpx; border-radius: 24rpx; font-size: 28rpx; font-weight: 700; }
 .profile-top { display: flex; align-items: center; gap: 22rpx; }
-.avatar { width: 96rpx; height: 96rpx; border-radius: 50%; text-align: center; line-height: 96rpx; font-size: 40rpx; font-weight: 700; }
+.avatar-shell { display: flex; align-items: center; justify-content: center; width: 116rpx; height: 116rpx; border-radius: 50%; flex-shrink: 0; }
+.avatar { width: 96rpx; height: 96rpx; border-radius: 50%; text-align: center; line-height: 96rpx; font-size: 40rpx; font-weight: 700; display: flex; align-items: center; justify-content: center; overflow: hidden; }
+.avatar--img { width: 116rpx; height: 116rpx; }
 .profile-copy { flex: 1; }
 .nickname { display: block; color: #32271f; font-size: 38rpx; font-weight: 700; line-height: 1.35; }
-.signature { display: block; margin-top: 10rpx; color: #a89a8d; font-size: 26rpx; line-height: 1.6; }
+.profile-tagline { display: block; margin-top: 8rpx; color: #b0a398; font-size: 22rpx; line-height: 1.4; }
 .picker-row { display: flex; gap: 18rpx; margin-top: 28rpx; }
 .picker-item { flex: 1; }
 .picker-chip { border-radius: 28rpx; background: rgba(255,255,255,0.72); text-align: center; font-size: 28rpx; font-weight: 700; }
@@ -337,6 +635,7 @@ function goJoinPage() {
 .count-badge { min-width: 56rpx; height: 56rpx; padding: 0 16rpx; border-radius: 22rpx; text-align: center; line-height: 56rpx; font-size: 26rpx; font-weight: 700; }
 .sheet-mask { position: fixed; inset: 0; display: flex; align-items: flex-end; justify-content: center; background: rgba(61,45,31,0.26); z-index: 999; }
 .sheet-panel { width: 100%; max-height: 72vh; display: flex; flex-direction: column; border-radius: 40rpx 40rpx 0 0; padding: 18rpx 24rpx calc(28rpx + env(safe-area-inset-bottom)); }
+.sheet-panel--login { max-height: 55vh; }
 .sheet-handle { width: 84rpx; height: 8rpx; margin: 0 auto; border-radius: 999rpx; background: rgba(156,139,126,0.28); }
 .sheet-title { display: block; margin-top: 20rpx; text-align: center; color: #2f251d; font-size: 34rpx; font-weight: 700; }
 .sheet-grid { display: grid; flex: 1; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16rpx; margin-top: 28rpx; overflow-y: auto; }
@@ -351,4 +650,31 @@ function goJoinPage() {
 .sheet-button--ghost { background: rgba(255,255,255,0.82); color: #7d6c60; }
 .sheet-button--solid { color: #ffffff; }
 @keyframes cardFadeUp { from { opacity: 0; transform: translateY(24rpx); } to { opacity: 1; transform: translateY(0); } }
+
+// 登录 sheet
+.login-header { display: flex; flex-direction: column; align-items: center; margin-top: 20rpx; }
+.login-avatar-btn { background: transparent; padding: 0; margin: 0; border: 0; line-height: 1; display: flex; flex-direction: column; align-items: center; }
+.login-avatar-btn::after { border: 0; }
+.login-avatar-shell { display: flex; align-items: center; justify-content: center; width: 140rpx; height: 140rpx; border-radius: 50%; margin-bottom: 12rpx; }
+.login-avatar-shell .avatar { width: 120rpx; height: 120rpx; font-size: 50rpx; }
+.login-avatar-hint { display: block; color: #9f9388; font-size: 22rpx; margin-top: 8rpx; }
+.login-title { display: block; color: #2f251d; font-size: 38rpx; font-weight: 700; margin-top: 20rpx; }
+.login-desc { display: block; margin-top: 14rpx; color: #9f9388; font-size: 26rpx; text-align: center; }
+.login-field { display: flex; align-items: center; gap: 18rpx; margin-top: 32rpx; padding: 0 8rpx; width: 100%; }
+.login-field__label { color: #2f251d; font-size: 28rpx; font-weight: 700; flex-shrink: 0; }
+.login-field__input { flex: 1; height: 80rpx; padding: 0 22rpx; border-radius: 22rpx; background: rgba(255,255,255,0.74); color: #3f3126; font-size: 26rpx; }
+.login-button { width: 100%; height: 88rpx; border-radius: 28rpx; margin-top: 32rpx; text-align: center; line-height: 88rpx; font-size: 30rpx; font-weight: 700; color: #ffffff; letter-spacing: 2rpx; }
+
+// 个人资料编辑 sheet
+.profile-edit-row { display: flex; align-items: center; gap: 24rpx; margin-top: 30rpx; padding: 16rpx 0; }
+.profile-edit-avatar-btn { background: transparent; padding: 0; margin: 0; border: 0; line-height: 1; }
+.profile-edit-avatar-btn::after { border: 0; }
+.profile-edit-avatar { width: 100rpx; height: 100rpx; border-radius: 50%; flex-shrink: 0; }
+.profile-edit-avatar-placeholder { width: 100rpx; height: 100rpx; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 40rpx; flex-shrink: 0; }
+.profile-edit-info { flex: 1; }
+.profile-edit-nickname-input { display: block; color: #2f251d; font-size: 34rpx; font-weight: 700; line-height: 1.3; height: 52rpx; }
+.profile-edit-divider { height: 2rpx; margin-top: 24rpx; background: rgba(255,255,255,0.65); }
+.profile-edit-pickers { display: flex; gap: 18rpx; margin-top: 28rpx; }
+.profile-edit-pickers .picker-item { flex: 1; }
+.logout-button { width: 100%; height: 88rpx; border-radius: 28rpx; margin-top: 40rpx; text-align: center; line-height: 88rpx; font-size: 30rpx; font-weight: 700; }
 </style>

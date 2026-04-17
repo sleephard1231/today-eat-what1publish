@@ -2,32 +2,57 @@
 const common_vendor = require("../../common/vendor.js");
 const common_data = require("../../common/data.js");
 const utils_appState = require("../../utils/app-state.js");
+const utils_userState = require("../../utils/user-state.js");
 const _sfc_main = {
   __name: "my",
   setup(__props) {
     const statusBarHeight = common_vendor.index.getSystemInfoSync().statusBarHeight || 20;
+    const menuButtonRect = typeof common_vendor.index.getMenuButtonBoundingClientRect === "function" ? common_vendor.index.getMenuButtonBoundingClientRect() : null;
     const state = common_vendor.ref(utils_appState.getAppState());
+    const user = common_vendor.ref(utils_userState.getUser());
     const historyCount = common_vendor.ref(0);
     const applicationCount = common_vendor.ref(0);
     const showMbtiPopup = common_vendor.ref(false);
     const showZodiacPopup = common_vendor.ref(false);
+    const showProfileSheet = common_vendor.ref(false);
+    const showLoginSheet = common_vendor.ref(false);
+    const isLoggingIn = common_vendor.ref(false);
+    const loginForm = common_vendor.reactive({
+      avatar: "",
+      nickname: ""
+    });
     const pendingMbti = common_vendor.ref(state.value.profile.mbti);
     const pendingZodiac = common_vendor.ref(state.value.profile.zodiac);
-    const refreshState = () => {
+    function refreshState() {
       state.value = utils_appState.getAppState();
+      user.value = utils_userState.getUser();
       historyCount.value = utils_appState.getHistoryList().length;
       applicationCount.value = utils_appState.getCampusApplications().length;
       pendingMbti.value = state.value.profile.mbti;
       pendingZodiac.value = state.value.profile.zodiac;
       utils_appState.applyTabBarTheme(state.value.mode);
-    };
-    common_vendor.onLoad(refreshState);
+    }
+    function onUserStateChange() {
+      user.value = utils_userState.getUser();
+      refreshState();
+    }
+    common_vendor.onLoad(() => {
+      refreshState();
+      common_vendor.index.$on("user-state-changed", onUserStateChange);
+      common_vendor.index.$on("app-state-changed", refreshState);
+    });
     common_vendor.onShow(refreshState);
+    common_vendor.onUnload(() => {
+      common_vendor.index.$off("user-state-changed", onUserStateChange);
+      common_vendor.index.$off("app-state-changed", refreshState);
+    });
     const theme = common_vendor.computed(() => utils_appState.getTheme(state.value.mode));
     const currentCampus = common_vendor.computed(() => utils_appState.getCampusById(state.value.campusId));
     const currentMbtiCard = common_vendor.computed(() => common_data.mbtiCardOptions.find((item) => item.value === state.value.profile.mbti) || common_data.mbtiCardOptions[0]);
     const currentZodiacCard = common_vendor.computed(() => common_data.zodiacCardOptions.find((item) => item.value === state.value.profile.zodiac) || common_data.zodiacCardOptions[0]);
     const isCampusMode = common_vendor.computed(() => state.value.mode === "campus");
+    const topCardMargin = common_vendor.computed(() => menuButtonRect ? menuButtonRect.top + menuButtonRect.height + 8 : statusBarHeight + 42);
+    const profileHeadline = common_vendor.computed(() => `${currentZodiacCard.value.value} · ${currentMbtiCard.value.funAlias}`);
     const selectedCanteenText = common_vendor.computed(() => {
       const selected = utils_appState.getSelectedCanteen(state.value.campusId);
       return selected.length ? selected.map((item) => item.name).join("、") : "默认全校饭堂";
@@ -68,6 +93,16 @@ const _sfc_main = {
       boxShadow: theme.value.shadow,
       color: "#ffffff"
     }));
+    const avatarShellStyle = common_vendor.computed(() => ({
+      background: theme.value.accentSoft,
+      border: `2rpx solid ${theme.value.border}`,
+      boxShadow: state.value.mode === "campus" ? "0 10rpx 24rpx rgba(103, 182, 160, 0.18)" : "0 10rpx 24rpx rgba(255, 138, 61, 0.16)"
+    }));
+    const ghostButtonStyle = common_vendor.computed(() => ({
+      background: theme.value.accentSoft,
+      color: theme.value.accent,
+      border: `1px solid ${theme.value.border}`
+    }));
     function selectorCardStyle(isActive) {
       return {
         background: isActive ? `linear-gradient(135deg, ${theme.value.accent} 0%, ${theme.value.accentDeep} 100%)` : theme.value.accentSoft,
@@ -86,6 +121,103 @@ const _sfc_main = {
     }
     function cardEntranceStyle(index) {
       return { animationDelay: `${index * 100}ms` };
+    }
+    function handleProfileAreaClick() {
+      if (user.value.isLoggedIn) {
+        showProfileSheet.value = true;
+      } else {
+        showLoginSheet.value = true;
+      }
+    }
+    function closeLoginSheet() {
+      showLoginSheet.value = false;
+    }
+    function closeProfileSheet() {
+      showProfileSheet.value = false;
+    }
+    function onChooseAvatar(e) {
+      loginForm.avatar = e.detail.avatarUrl || "";
+    }
+    function onNicknameInput(e) {
+      loginForm.nickname = e.detail.value || "";
+    }
+    async function handleLogin() {
+      if (isLoggingIn.value)
+        return;
+      if (!loginForm.nickname.trim()) {
+        common_vendor.index.showToast({ title: "请填写昵称", icon: "none" });
+        return;
+      }
+      isLoggingIn.value = true;
+      try {
+        const mockOpenId = `local_openid_${Date.now()}`;
+        const mockToken = `local_token_${Date.now()}`;
+        utils_userState.saveUser({
+          openId: mockOpenId,
+          sessionKey: "",
+          token: mockToken,
+          nickname: loginForm.nickname.trim(),
+          avatar: loginForm.avatar
+        });
+        utils_appState.saveAppState({
+          profile: {
+            nickname: loginForm.nickname.trim(),
+            avatar: loginForm.avatar,
+            openId: mockOpenId
+          }
+        });
+        user.value = utils_userState.getUser();
+        state.value = utils_appState.getAppState();
+        showLoginSheet.value = false;
+        common_vendor.index.showToast({ title: "登录成功", icon: "none" });
+      } catch (error) {
+        common_vendor.index.__f__("warn", "at pages/my/my.vue:481", "handleLogin failed", error);
+        common_vendor.index.showToast({ title: "登录失败，请重试", icon: "none" });
+      } finally {
+        isLoggingIn.value = false;
+      }
+    }
+    function handleLogout() {
+      common_vendor.index.showModal({
+        title: "确定退出登录？",
+        content: "退出后你的个性化推荐记录会保留",
+        confirmText: "退出",
+        success: (res) => {
+          if (res.confirm) {
+            utils_userState.clearUser();
+            showProfileSheet.value = false;
+            common_vendor.index.showToast({ title: "已退出登录", icon: "none" });
+          }
+        }
+      });
+    }
+    function onChooseAvatarEdit(e) {
+      const avatarUrl = e.detail.avatarUrl || "";
+      if (avatarUrl) {
+        utils_userState.saveUser({ avatar: avatarUrl });
+        utils_appState.saveAppState({ profile: { avatar: avatarUrl } });
+        user.value = utils_userState.getUser();
+        common_vendor.index.showToast({ title: "头像已更新", icon: "none" });
+      }
+    }
+    function onNicknameEdit(e) {
+      const newNickname = (e.detail.value || "").trim();
+      if (newNickname && newNickname !== user.value.nickname) {
+        utils_userState.saveUser({ nickname: newNickname });
+        utils_appState.saveAppState({ profile: { nickname: newNickname } });
+        user.value = utils_userState.getUser();
+        common_vendor.index.showToast({ title: "昵称已更新", icon: "none" });
+      }
+    }
+    function openMbtiPopupFromSheet() {
+      pendingMbti.value = state.value.profile.mbti;
+      showProfileSheet.value = false;
+      showMbtiPopup.value = true;
+    }
+    function openZodiacPopupFromSheet() {
+      pendingZodiac.value = state.value.profile.zodiac;
+      showProfileSheet.value = false;
+      showZodiacPopup.value = true;
     }
     function openMbtiPopup() {
       pendingMbti.value = state.value.profile.mbti;
@@ -138,53 +270,110 @@ const _sfc_main = {
     }
     return (_ctx, _cache) => {
       return common_vendor.e({
-        a: common_vendor.s(accentFillStyle.value),
-        b: common_vendor.t(state.value.profile.nickname),
-        c: common_vendor.t(currentMbtiCard.value.emoji),
-        d: common_vendor.t(currentMbtiCard.value.value),
-        e: common_vendor.t(currentMbtiCard.value.funAlias),
-        f: common_vendor.s(pickerChipStyle.value),
-        g: common_vendor.o(openMbtiPopup, "8c"),
-        h: common_vendor.t(currentZodiacCard.value.emoji),
-        i: common_vendor.t(currentZodiacCard.value.value),
-        j: common_vendor.t(currentZodiacCard.value.funAlias),
+        a: user.value.avatar
+      }, user.value.avatar ? {
+        b: user.value.avatar
+      } : {
+        c: common_vendor.s(accentFillStyle.value)
+      }, {
+        d: common_vendor.s(avatarShellStyle.value),
+        e: common_vendor.t(user.value.isLoggedIn ? user.value.nickname : "点击授权微信登录"),
+        f: common_vendor.t(profileHeadline.value),
+        g: common_vendor.o(handleProfileAreaClick, "b6"),
+        h: common_vendor.t(currentMbtiCard.value.emoji),
+        i: common_vendor.t(currentMbtiCard.value.value),
+        j: common_vendor.t(currentMbtiCard.value.funAlias),
         k: common_vendor.s(pickerChipStyle.value),
-        l: common_vendor.o(openZodiacPopup, "05"),
-        m: common_vendor.s(cardStyle.value),
-        n: common_vendor.s({
-          marginTop: `${common_vendor.unref(statusBarHeight) + 16}px`
+        l: common_vendor.o(openMbtiPopup, "d7"),
+        m: common_vendor.t(currentZodiacCard.value.emoji),
+        n: common_vendor.t(currentZodiacCard.value.value),
+        o: common_vendor.t(currentZodiacCard.value.funAlias),
+        p: common_vendor.s(pickerChipStyle.value),
+        q: common_vendor.o(openZodiacPopup, "e5"),
+        r: common_vendor.s(cardStyle.value),
+        s: common_vendor.s({
+          marginTop: `${topCardMargin.value}px`
         }),
-        o: isCampusMode.value
+        t: isCampusMode.value
       }, isCampusMode.value ? {
-        p: common_vendor.s(modePillStyle.value)
+        v: common_vendor.s(modePillStyle.value)
       } : {}, {
-        q: isCampusMode.value
+        w: isCampusMode.value
       }, isCampusMode.value ? {
-        r: common_vendor.t(currentCampus.value.name)
+        x: common_vendor.t(currentCampus.value.name)
       } : {}, {
-        s: common_vendor.t(campusDescription.value),
-        t: common_vendor.s(accentTextStyle.value),
-        v: common_vendor.o(goCampusPage, "75"),
-        w: common_vendor.s(cardStyle.value),
-        x: common_vendor.t(historyCount.value),
-        y: common_vendor.s(accentFillStyle.value),
-        z: common_vendor.o(goHistoryPage, "63"),
-        A: common_vendor.s(cardStyle.value),
-        B: isCampusMode.value
+        y: common_vendor.t(campusDescription.value),
+        z: common_vendor.s(accentTextStyle.value),
+        A: common_vendor.o(goCampusPage, "6a"),
+        B: common_vendor.s(cardStyle.value),
+        C: common_vendor.t(historyCount.value),
+        D: common_vendor.s(accentFillStyle.value),
+        E: common_vendor.o(goHistoryPage, "2b"),
+        F: common_vendor.s(cardStyle.value),
+        G: isCampusMode.value
       }, isCampusMode.value ? {
-        C: common_vendor.s(accentTextStyle.value),
-        D: common_vendor.o(goCanteenPage, "c0"),
-        E: common_vendor.t(applicationCount.value),
-        F: common_vendor.s(accentFillStyle.value),
-        G: common_vendor.o(goJoinPage, "bd"),
-        H: common_vendor.s(cardStyle.value),
-        I: common_vendor.s(serviceEntryActionStyle.value),
-        J: common_vendor.s(serviceEntryStyle.value),
-        K: common_vendor.o(goServicePage, "74")
+        H: common_vendor.s(accentTextStyle.value),
+        I: common_vendor.o(goCanteenPage, "b8"),
+        J: common_vendor.t(applicationCount.value),
+        K: common_vendor.s(accentFillStyle.value),
+        L: common_vendor.o(goJoinPage, "79"),
+        M: common_vendor.s(cardStyle.value),
+        N: common_vendor.s(serviceEntryActionStyle.value),
+        O: common_vendor.s(serviceEntryStyle.value),
+        P: common_vendor.o(goServicePage, "35")
       } : {}, {
-        L: showMbtiPopup.value
+        Q: showLoginSheet.value
+      }, showLoginSheet.value ? common_vendor.e({
+        R: loginForm.avatar
+      }, loginForm.avatar ? {
+        S: loginForm.avatar
+      } : {
+        T: common_vendor.s(accentFillStyle.value)
+      }, {
+        U: common_vendor.s(avatarShellStyle.value),
+        V: common_vendor.o(onChooseAvatar, "39"),
+        W: loginForm.nickname,
+        X: common_vendor.o(onNicknameInput, "2c"),
+        Y: common_vendor.t(isLoggingIn.value ? "登录中..." : "登录"),
+        Z: common_vendor.s(accentFillStyle.value),
+        aa: isLoggingIn.value,
+        ab: common_vendor.o(handleLogin, "db"),
+        ac: common_vendor.s(sheetStyle.value),
+        ad: common_vendor.o(() => {
+        }, "a3"),
+        ae: common_vendor.o(closeLoginSheet, "18")
+      }) : {}, {
+        af: showProfileSheet.value
+      }, showProfileSheet.value ? common_vendor.e({
+        ag: user.value.avatar
+      }, user.value.avatar ? {
+        ah: user.value.avatar
+      } : {
+        ai: common_vendor.s(accentFillStyle.value)
+      }, {
+        aj: common_vendor.o(onChooseAvatarEdit, "6e"),
+        ak: user.value.nickname,
+        al: common_vendor.o(onNicknameEdit, "fa"),
+        am: common_vendor.t(currentMbtiCard.value.emoji),
+        an: common_vendor.t(currentMbtiCard.value.value),
+        ao: common_vendor.t(currentMbtiCard.value.funAlias),
+        ap: common_vendor.s(pickerChipStyle.value),
+        aq: common_vendor.o(openMbtiPopupFromSheet, "8b"),
+        ar: common_vendor.t(currentZodiacCard.value.emoji),
+        as: common_vendor.t(currentZodiacCard.value.value),
+        at: common_vendor.t(currentZodiacCard.value.funAlias),
+        av: common_vendor.s(pickerChipStyle.value),
+        aw: common_vendor.o(openZodiacPopupFromSheet, "59"),
+        ax: common_vendor.s(ghostButtonStyle.value),
+        ay: common_vendor.o(handleLogout, "04"),
+        az: common_vendor.s(sheetStyle.value),
+        aA: common_vendor.o(() => {
+        }, "6a"),
+        aB: common_vendor.o(closeProfileSheet, "f5")
+      }) : {}, {
+        aC: showMbtiPopup.value
       }, showMbtiPopup.value ? {
-        M: common_vendor.f(common_vendor.unref(common_data.mbtiCardOptions), (item, index, i0) => {
+        aD: common_vendor.f(common_vendor.unref(common_data.mbtiCardOptions), (item, index, i0) => {
           return {
             a: common_vendor.t(item.emoji),
             b: common_vendor.t(item.value),
@@ -199,17 +388,17 @@ const _sfc_main = {
             k: common_vendor.o(($event) => pendingMbti.value = item.value, item.value)
           };
         }),
-        N: common_vendor.o(cancelMbtiSelection, "fa"),
-        O: common_vendor.s(accentFillStyle.value),
-        P: common_vendor.o(confirmMbtiSelection, "ce"),
-        Q: common_vendor.s(sheetStyle.value),
-        R: common_vendor.o(() => {
-        }, "1d"),
-        S: common_vendor.o(cancelMbtiSelection, "b6")
+        aE: common_vendor.o(cancelMbtiSelection, "60"),
+        aF: common_vendor.s(accentFillStyle.value),
+        aG: common_vendor.o(confirmMbtiSelection, "1b"),
+        aH: common_vendor.s(sheetStyle.value),
+        aI: common_vendor.o(() => {
+        }, "a2"),
+        aJ: common_vendor.o(cancelMbtiSelection, "a5")
       } : {}, {
-        T: showZodiacPopup.value
+        aK: showZodiacPopup.value
       }, showZodiacPopup.value ? {
-        U: common_vendor.f(common_vendor.unref(common_data.zodiacCardOptions), (item, index, i0) => {
+        aL: common_vendor.f(common_vendor.unref(common_data.zodiacCardOptions), (item, index, i0) => {
           return {
             a: common_vendor.t(item.emoji),
             b: common_vendor.t(item.value),
@@ -224,15 +413,15 @@ const _sfc_main = {
             k: common_vendor.o(($event) => pendingZodiac.value = item.value, item.value)
           };
         }),
-        V: common_vendor.o(cancelZodiacSelection, "3b"),
-        W: common_vendor.s(accentFillStyle.value),
-        X: common_vendor.o(confirmZodiacSelection, "d6"),
-        Y: common_vendor.s(sheetStyle.value),
-        Z: common_vendor.o(() => {
-        }, "57"),
-        aa: common_vendor.o(cancelZodiacSelection, "21")
+        aM: common_vendor.o(cancelZodiacSelection, "c5"),
+        aN: common_vendor.s(accentFillStyle.value),
+        aO: common_vendor.o(confirmZodiacSelection, "d5"),
+        aP: common_vendor.s(sheetStyle.value),
+        aQ: common_vendor.o(() => {
+        }, "6a"),
+        aR: common_vendor.o(cancelZodiacSelection, "91")
       } : {}, {
-        ab: common_vendor.s(pageStyle.value)
+        aS: common_vendor.s(pageStyle.value)
       });
     };
   }

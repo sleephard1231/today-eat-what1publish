@@ -24,7 +24,9 @@ const defaultState = {
   profile: {
     nickname: '大剑哥',
     mbti: 'ENFJ',
-    zodiac: '白羊座'
+    zodiac: '白羊座',
+    avatar: '',
+    openId: ''
   },
   daily: {
     dateKey: '',
@@ -40,12 +42,12 @@ const defaultHistory = [
   {
     id: 'history-1',
     mealName: '番茄肥牛米线',
-    vibe: '热乎乎又治愈',
-    canteen: '西苑食堂',
+    vibe: '热乎又治愈',
+    canteen: '同德',
     campusName: '广州商学院',
     createdAt: '04-14 12:18',
     mode: 'campus',
-    reason: 'ENFJ 的分享欲遇上白羊座的冲劲，今天就该来点热汤和牛肉。'
+    reason: 'ENFJ 今天更适合热闹又有分享感的一口，白羊座的冲劲也需要一点热汤接住，同德这份番茄肥牛米线会很顺口。'
   },
   {
     id: 'history-2',
@@ -55,17 +57,17 @@ const defaultHistory = [
     campusName: '广东外语外贸大学',
     createdAt: '04-13 18:42',
     mode: 'campus',
-    reason: '白羊座需要多巴胺加持，焗饭的满足感会让今天更顺。'
+    reason: '今天更适合来点有满足感的主食，芝士鸡排焗饭会比清淡路线更能把状态拉起来。'
   },
   {
     id: 'history-3',
     mealName: '黑椒牛柳意面',
-    vibe: '轻松但不敷衍',
-    canteen: '附近人气小店',
-    campusName: '普通版',
+    vibe: '松弛感在线',
+    canteen: '',
+    campusName: '普通版推荐',
     createdAt: '04-12 11:36',
     mode: 'normal',
-    reason: 'ENFJ 今天适合有氛围感的主食，意面刚好踩中状态。'
+    reason: 'ENFJ 的分享欲碰上白羊座今天的冲劲，黑椒牛柳意面这种干脆又有存在感的选择，会更合今天的节奏。'
   }
 ]
 
@@ -157,14 +159,44 @@ function createDynamicCampuses() {
   return getStoredApplications()
     .filter((item) => item.status === '已入驻')
     .map((item) => ({
-    id: item.campusId,
-    name: item.campusName,
-    campusTag: item.campusTag || '',
-    shortName: item.campusName.slice(0, 4),
-    district: item.city || '校园合作',
-    canteen: '',
-    specialties: []
+      id: item.campusId,
+      name: item.campusName,
+      campusTag: item.campusTag || '',
+      shortName: item.campusName.slice(0, 4),
+      district: item.city || '校园合作',
+      canteen: '',
+      specialties: []
     }))
+}
+
+function getDefaultCampusCanteenNames(currentCampus) {
+  return getCanteenListByCampusName(currentCampus.name)
+    .map((item) => item.name)
+    .filter(Boolean)
+}
+
+function buildCampusFoods(currentCampus, fallbackCanteenName) {
+  return (currentCampus.specialties || []).map((name) => ({
+    name,
+    vibe: `${currentCampus.shortName} 同学都爱的热门款`,
+    canteen: fallbackCanteenName || '默认全校饭堂'
+  }))
+}
+
+function buildReason({ state, pickedFood, selectedCanteenNames, seed }) {
+  const flavorWords = mbtiFlavorMap[state.profile.mbti] || ['今天适合吃点对味的']
+  const zodiacWords = zodiacFortuneMap[state.profile.zodiac] || ['今天这口会顺一点']
+  const flavorWord = flavorWords[seed % flavorWords.length]
+  const zodiacWord = zodiacWords[(seed + 1) % zodiacWords.length]
+
+  if (state.mode === 'campus') {
+    const rangeText = selectedCanteenNames.length
+      ? `圈定在 ${selectedCanteenNames.join('、')} 里帮你挑。`
+      : '今天先在全校饭堂里帮你挑了一口。'
+    return `${rangeText}${state.profile.mbti} 的 ${flavorWord}，碰上 ${state.profile.zodiac} 今天的 ${zodiacWord}，${pickedFood.name} 放在 ${pickedFood.canteen || '默认全校饭堂'}会更顺口。`
+  }
+
+  return `${state.profile.mbti} 的 ${flavorWord}，刚好接住 ${state.profile.zodiac} 今天的 ${zodiacWord}。随机刷到 ${pickedFood.name}，这一口会比较对你现在的状态。`
 }
 
 export function getCampusList() {
@@ -259,11 +291,13 @@ function getFoodPool(state) {
   const currentCampus = getCampusById(state.campusId)
   const selectedCanteens = getSelectedCanteen(state.campusId)
   const selectedCanteenNames = selectedCanteens.map((item) => item.name)
-  const campusFoods = (currentCampus.specialties || []).map((name) => ({
-    name,
-    vibe: `${currentCampus.shortName} 同学都爱的热门款`,
-    canteen: currentCampus.canteen
-  }))
+  const defaultCampusCanteenNames = getDefaultCampusCanteenNames(currentCampus)
+  const fallbackCanteenName = defaultCampusCanteenNames[0] || '默认全校饭堂'
+  const campusFoods = buildCampusFoods(currentCampus, fallbackCanteenName)
+
+  if (state.mode !== 'campus') {
+    return [...genericFoods]
+  }
 
   if (selectedCanteenNames.length) {
     return [...campusFoods, ...genericFoods].map((item, index) => ({
@@ -272,7 +306,17 @@ function getFoodPool(state) {
     }))
   }
 
-  return [...campusFoods, ...genericFoods]
+  if (defaultCampusCanteenNames.length) {
+    return [...campusFoods, ...genericFoods].map((item, index) => ({
+      ...item,
+      canteen: defaultCampusCanteenNames[index % defaultCampusCanteenNames.length]
+    }))
+  }
+
+  return [...campusFoods, ...genericFoods].map((item) => ({
+    ...item,
+    canteen: item.canteen || '默认全校饭堂'
+  }))
 }
 
 export function getTodayFortune(state = getAppState()) {
@@ -304,24 +348,30 @@ export function drawMealResult() {
 
   const currentCampus = getCampusById(state.campusId)
   const pool = getFoodPool(state)
+  const defaultCampusCanteenNames = getDefaultCampusCanteenNames(currentCampus)
   const seed = createSeed(`${state.profile.mbti}-${state.profile.zodiac}-${state.mode}-${state.daily.remaining}-${Date.now()}`)
   const pickedFood = pool[seed % pool.length]
-  const flavorWords = mbtiFlavorMap[state.profile.mbti] || ['今天吃点好的']
-  const zodiacWords = zodiacFortuneMap[state.profile.zodiac] || ['好运开饭']
   const selectedCanteens = getSelectedCanteen(state.campusId)
   const selectedCanteenNames = selectedCanteens.map((item) => item.name)
-  const selectedScopeText = selectedCanteenNames.length
-    ? `已按你选的饭堂范围推荐：${selectedCanteenNames.join('、')}。`
+  const canteen = state.mode === 'campus'
+    ? (pickedFood.canteen || defaultCampusCanteenNames[0] || '默认全校饭堂')
     : ''
-
   const result = {
     id: `meal-${Date.now()}`,
     mealName: pickedFood.name,
     vibe: pickedFood.vibe,
-    canteen: state.mode === 'campus' ? (currentCampus.canteen || '校园版推荐') : pickedFood.canteen,
+    canteen,
     campusName: state.mode === 'campus' ? currentCampus.name : '普通版推荐',
     mode: state.mode,
-    reason: `${selectedScopeText}${state.profile.mbti} 的 ${flavorWords[seed % flavorWords.length]} 遇上 ${state.profile.zodiac} 的 ${zodiacWords[(seed + 1) % zodiacWords.length]}，今天就吃 ${pickedFood.name}。`,
+    reason: buildReason({
+      state,
+      pickedFood: {
+        ...pickedFood,
+        canteen
+      },
+      selectedCanteenNames,
+      seed
+    }),
     createdAt: formatTimeLabel()
   }
 

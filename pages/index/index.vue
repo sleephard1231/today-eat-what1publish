@@ -2,15 +2,34 @@
   <view class="page" :style="pageStyle">
     <view class="hero" :style="{ paddingTop: `${statusBarHeight + 16}px` }">
       <view class="chip-row">
-        <view class="chip primary-chip press-feedback" :style="accentFillStyle" hover-class="press-feedback--active" hover-start-time="20" hover-stay-time="90" @click="triggerChipBounce('campus')">
+        <view
+          class="chip primary-chip press-feedback"
+          :style="accentFillStyle"
+          hover-class="press-feedback--active"
+          hover-start-time="20"
+          hover-stay-time="90"
+          @click="triggerChipBounce('campus')"
+        >
           <text class="chip-icon" :class="{ 'chip-icon--bouncing': bouncingChip === 'campus' }">{{ campusChipIcon }}</text>
           <text class="chip-label">{{ campusChipLabel }}</text>
         </view>
-        <view class="chip press-feedback" hover-class="press-feedback--active" hover-start-time="20" hover-stay-time="90" @click="triggerChipBounce('mbti')">
+        <view
+          class="chip press-feedback"
+          hover-class="press-feedback--active"
+          hover-start-time="20"
+          hover-stay-time="90"
+          @click="triggerChipBounce('mbti')"
+        >
           <text class="chip-icon" :class="{ 'chip-icon--bouncing': bouncingChip === 'mbti' }">🧠</text>
           <text class="chip-label">{{ state.profile.mbti }}</text>
         </view>
-        <view class="chip press-feedback" hover-class="press-feedback--active" hover-start-time="20" hover-stay-time="90" @click="triggerChipBounce('zodiac')">
+        <view
+          class="chip press-feedback"
+          hover-class="press-feedback--active"
+          hover-start-time="20"
+          hover-stay-time="90"
+          @click="triggerChipBounce('zodiac')"
+        >
           <text class="chip-icon" :class="{ 'chip-icon--bouncing': bouncingChip === 'zodiac' }">⭐</text>
           <text class="chip-label">{{ state.profile.zodiac }}</text>
         </view>
@@ -67,7 +86,14 @@
       </view>
     </view>
 
-    <button class="eat-button press-feedback" :style="accentFillStyle" hover-class="press-feedback--active" hover-start-time="20" hover-stay-time="90" @click="handleDrawMeal">
+    <button
+      class="eat-button press-feedback"
+      :style="accentFillStyle"
+      hover-class="press-feedback--active"
+      hover-start-time="20"
+      hover-stay-time="90"
+      @click="handleDrawMeal"
+    >
       <text class="eat-button__label">吃什么</text>
     </button>
 
@@ -88,24 +114,32 @@
     <view v-if="showResultPopup && popupResult" class="result-popup-mask" @click="closeResultPopup">
       <view class="result-popup" :style="popupCardStyle" @click.stop>
         <view class="result-popup__glow"></view>
+
         <view class="result-popup__top">
           <text class="result-popup__tag">{{ state.mode === 'campus' ? '校园版推荐' : '普通版推荐' }}</text>
           <text class="result-popup__time">{{ popupResult.createdAt }}</text>
         </view>
 
-        <view class="result-popup__reveal" :class="{ 'is-visible': popupRevealStage >= 1 }">
+        <view class="result-popup__reveal is-visible">
           <text class="result-popup__name">{{ popupResult.mealName }}</text>
-          <text class="result-popup__vibe">{{ popupResult.vibe }}</text>
+          <text class="result-popup__vibe-badge" :style="vibeBadgeStyle">{{ popupResult.vibe }}</text>
         </view>
 
-        <view class="result-popup__meta-wrap" :class="{ 'is-visible': popupRevealStage >= 2 }">
-          <text class="result-popup__meta">{{ popupResult.campusName }} · {{ popupResult.canteen }}</text>
+        <view class="result-popup__meta-wrap is-visible">
+          <text v-if="popupMetaText" class="result-popup__meta">{{ popupMetaText }}</text>
           <view class="result-popup__divider"></view>
-          <text class="result-popup__label">今天就吃它</text>
+          <text class="result-popup__label">推荐理由</text>
           <text class="result-popup__reason">{{ popupRevealReason }}</text>
         </view>
 
-        <button class="result-popup__button press-feedback" :style="accentFillStyle" hover-class="press-feedback--active" hover-start-time="20" hover-stay-time="90" @click="closeResultPopup">收下推荐</button>
+        <button
+          class="result-popup__button press-feedback"
+          :style="accentFillStyle"
+          hover-class="press-feedback--active"
+          hover-start-time="20"
+          hover-stay-time="90"
+          @click="closeResultPopup"
+        >今天吃它</button>
       </view>
     </view>
   </view>
@@ -122,15 +156,12 @@ const state = ref(getAppState())
 const isDrawing = ref(false)
 const showResultPopup = ref(false)
 const popupResult = ref(null)
-const popupRevealStage = ref(0)
 const bouncingChip = ref('')
 const animatedAppetiteProgress = ref(0)
 const animatedEnergyProgress = ref(0)
 const animatedLuckProgress = ref(0)
 
 let drawTimer = null
-let revealTimerOne = null
-let revealTimerTwo = null
 let progressTimer = null
 let chipBounceTimer = null
 
@@ -151,11 +182,7 @@ const luckProgress = computed(() => getLevelProgress(fortune.value.luck, luckLab
 
 function clearRevealTimers() {
   if (drawTimer) clearTimeout(drawTimer)
-  if (revealTimerOne) clearTimeout(revealTimerOne)
-  if (revealTimerTwo) clearTimeout(revealTimerTwo)
   drawTimer = null
-  revealTimerOne = null
-  revealTimerTwo = null
 }
 
 function clearProgressTimer() {
@@ -190,31 +217,41 @@ function refreshState() {
 
 function buildRevealReason(result) {
   if (!result) return ''
-  return state.value.mode === 'campus'
-    ? `${result.canteen} 这口最对你今天的状态。`
-    : `${result.vibe}，今天就该吃这一口。`
+
+  if (result.reason) {
+    return result.reason
+  }
+
+  if (state.value.mode === 'campus') {
+    return `${result.canteen || '这家饭堂'} 这口，会比较对你今天的状态。`
+  }
+
+  return `${result.mealName} 今天会比平时更顺口。`
 }
 
 function buildMiniProgressStyle(percent) {
-  const isCampusMode = state.value.mode === 'campus'
+  const t = theme.value
   return {
     width: `${percent}%`,
-    background: isCampusMode
-      ? 'linear-gradient(90deg, #67b6a0 0%, #67b6a0 100%)'
-      : 'linear-gradient(90deg, #ff9b5a 0%, #ff7a2f 100%)',
-    boxShadow: isCampusMode
-      ? '0 6rpx 14rpx rgba(103, 182, 160, 0.18)'
-      : '0 6rpx 14rpx rgba(255, 122, 47, 0.18)'
+    background: `linear-gradient(90deg, ${t.accent} 0%, ${t.accentDeep} 100%)`,
+    boxShadow: `0 6rpx 14rpx ${t.accent}30`
   }
 }
 
-const miniProgressTrackStyle = computed(() => (
-  state.value.mode === 'campus'
-    ? { background: 'rgba(103, 182, 160, 0.18)', boxShadow: 'inset 0 0 0 1rpx rgba(103, 182, 160, 0.08)' }
-    : { background: 'rgba(255, 122, 47, 0.14)', boxShadow: 'inset 0 0 0 1rpx rgba(255, 122, 47, 0.06)' }
-))
+const miniProgressTrackStyle = computed(() => {
+  const t = theme.value
+  return {
+    background: `${t.accent}24`,
+    boxShadow: `inset 0 0 0 1rpx ${t.accent}14`
+  }
+})
 
 const popupRevealReason = computed(() => buildRevealReason(popupResult.value))
+const popupMetaText = computed(() => {
+  if (!popupResult.value) return ''
+  if (popupResult.value.mode !== 'campus') return ''
+  return [popupResult.value.campusName, popupResult.value.canteen].filter(Boolean).join(' · ')
+})
 const appetiteProgressStyle = computed(() => buildMiniProgressStyle(animatedAppetiteProgress.value))
 const energyProgressStyle = computed(() => buildMiniProgressStyle(animatedEnergyProgress.value))
 const luckProgressStyle = computed(() => buildMiniProgressStyle(animatedLuckProgress.value))
@@ -242,6 +279,13 @@ const popupCardStyle = computed(() => ({
   boxShadow: theme.value.shadow,
   border: `1px solid ${theme.value.border}`
 }))
+const vibeBadgeStyle = computed(() => {
+  const t = theme.value
+  return {
+    color: t.accentDeep,
+    background: `${t.accent}20`
+  }
+})
 
 function triggerChipBounce(type) {
   clearChipBounceTimer()
@@ -256,7 +300,6 @@ function handleDrawMeal() {
   if (isDrawing.value) return
 
   clearRevealTimers()
-  popupRevealStage.value = 0
   showResultPopup.value = false
 
   const drawResult = drawMealResult()
@@ -275,19 +318,12 @@ function handleDrawMeal() {
   drawTimer = setTimeout(() => {
     isDrawing.value = false
     showResultPopup.value = true
-    popupRevealStage.value = 1
     drawTimer = null
-
-    revealTimerOne = setTimeout(() => {
-      popupRevealStage.value = 2
-      revealTimerOne = null
-    }, 220)
   }, 1500)
 }
 
 function closeResultPopup() {
   showResultPopup.value = false
-  popupRevealStage.value = 0
   clearRevealTimers()
 }
 
@@ -310,27 +346,27 @@ onUnload(() => {
 .chip-label { line-height: 1; }
 .hero-title { display: block; margin-top: 34rpx; font-size: 70rpx; line-height: 1.08; font-weight: 700; }
 .hero-subtitle { display: block; margin-top: 18rpx; color: #b0a59b; font-size: 30rpx; line-height: 1.6; }
+
 .fortune-card { position: relative; overflow: hidden; padding: 34rpx 30rpx; border-radius: 34rpx; }
 .fortune-glow { position: absolute; top: -60rpx; right: -40rpx; width: 220rpx; height: 220rpx; border-radius: 50%; background: radial-gradient(circle, rgba(255,167,102,0.18) 0%, rgba(255,167,102,0) 72%); pointer-events: none; }
 .fortune-head, .fortune-grid, .fortune-tip { position: relative; z-index: 1; }
 .fortune-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 20rpx; }
 .fortune-head__copy { flex: 1; }
 .fortune-date { display: block; color: #b8a99c; font-size: 26rpx; }
-.fortune-title { display: block; margin-top: 12rpx; color: #3d3026; font-size: 42rpx; font-weight: 700; animation: titleBreath 2.3s ease-in-out infinite; transform-origin: left center; }
+.fortune-title { display: block; margin-top: 12rpx; color: #3d3026; font-size: 42rpx; font-weight: 700; transform-origin: left center; }
 .fortune-note { display: block; margin-top: 10rpx; color: rgba(176,165,155,0.82); font-size: 20rpx; line-height: 1.4; }
 .fortune-badge { display: flex; align-items: center; justify-content: center; width: 72rpx; height: 72rpx; border-radius: 50%; }
-.fortune-badge__icon { font-size: 30rpx; animation: confettiWiggle 1.8s ease-in-out infinite; }
+.fortune-badge__icon { font-size: 30rpx; }
 .fortune-grid { display: flex; justify-content: space-between; margin-top: 18rpx; gap: 12rpx; }
 .fortune-item { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 10rpx; padding-top: 8rpx; }
 .fortune-icon { font-size: 34rpx; }
 .fortune-icon--one { animation: iconBounce 1.9s ease-in-out infinite; }
-.fortune-icon--two { animation: iconBounce 1.9s ease-in-out 0.18s infinite; }
-.fortune-icon--three { animation: iconBounce 1.9s ease-in-out 0.36s infinite; }
 .fortune-name { color: #9e938a; font-size: 24rpx; }
 .fortune-value { font-size: 28rpx; font-weight: 700; }
 .fortune-mini-progress { width: 100%; height: 14rpx; margin-top: 12rpx; border-radius: 999rpx; overflow: hidden; }
-.fortune-mini-progress__fill { height: 100%; border-radius: inherit; transition: width 0.5s cubic-bezier(0.22, 1, 0.36, 1); animation: progressGlow 2.2s ease-in-out infinite; }
+.fortune-mini-progress__fill { height: 100%; border-radius: inherit; transition: width 0.5s cubic-bezier(0.22, 1, 0.36, 1); }
 .fortune-tip { display: flex; justify-content: space-between; margin-top: 28rpx; padding-top: 24rpx; border-top: 2rpx solid rgba(255,255,255,0.65); color: #907f72; font-size: 24rpx; }
+
 .eat-button { width: 100%; margin-top: 32rpx; border-radius: 30rpx; padding: 30rpx 0; text-align: center; }
 .eat-button__label { color: #ffffff; font-size: 40rpx; font-weight: 700; letter-spacing: 8rpx; }
 
@@ -345,6 +381,7 @@ onUnload(() => {
 .draw-float--three { bottom: 20rpx; left: 50%; margin-left: -54rpx; animation: floatMove 1.2s ease-in-out 0.35s infinite alternate; }
 .draw-title { display: block; margin-top: 32rpx; color: #35291f; font-size: 36rpx; font-weight: 700; }
 .draw-desc { display: block; margin-top: 14rpx; color: #9a8d82; font-size: 25rpx; line-height: 1.6; }
+
 .result-popup { position: relative; width: 100%; max-width: 650rpx; overflow: hidden; border-radius: 42rpx; padding: 34rpx 30rpx 30rpx; animation: popupRise 0.35s ease-out; }
 .result-popup__glow { position: absolute; top: -90rpx; right: -50rpx; width: 240rpx; height: 240rpx; border-radius: 50%; background: radial-gradient(circle, rgba(255,165,92,0.24) 0%, rgba(255,165,92,0) 70%); }
 .result-popup__top, .result-popup__reveal, .result-popup__meta-wrap { position: relative; z-index: 1; }
@@ -353,20 +390,61 @@ onUnload(() => {
 .result-popup__time { color: #b1a49a; font-size: 24rpx; }
 .result-popup__reveal, .result-popup__meta-wrap { opacity: 0; transform: translateY(18rpx); }
 .result-popup__reveal.is-visible, .result-popup__meta-wrap.is-visible { opacity: 1; transform: translateY(0); transition: all 0.28s ease-out; }
-.result-popup__name { display: block; margin-top: 24rpx; color: #2f251d; font-size: 64rpx; line-height: 1.1; font-weight: 700; }
-.result-popup__vibe { display: block; margin-top: 14rpx; color: #6f5d50; font-size: 30rpx; font-weight: 600; }
-.result-popup__meta { display: block; margin-top: 22rpx; color: #9b8d82; font-size: 26rpx; line-height: 1.6; }
-.result-popup__divider { height: 2rpx; margin-top: 24rpx; background: linear-gradient(90deg, rgba(255,138,61,0) 0%, rgba(255,138,61,0.3) 50%, rgba(255,138,61,0) 100%); }
-.result-popup__label { display: block; margin-top: 22rpx; color: #8b7a6d; font-size: 24rpx; font-weight: 700; letter-spacing: 2rpx; }
-.result-popup__reason { display: block; margin-top: 14rpx; color: #4d3a2e; font-size: 34rpx; line-height: 1.45; font-weight: 700; }
-.result-popup__button { margin-top: 30rpx; border-radius: 28rpx; height: 88rpx; line-height: 88rpx; font-size: 30rpx; font-weight: 700; }
-@keyframes chipBounceTap { 0% { transform: scale(1); } 35% { transform: translateY(-4rpx) scale(1.14); } 60% { transform: translateY(1rpx) scale(0.96); } 100% { transform: translateY(0) scale(1); } }
-@keyframes titleBreath { 0%, 100% { opacity: 0.92; transform: scale(1); } 50% { opacity: 1; transform: scale(1.03); } }
-@keyframes confettiWiggle { 0%, 100% { transform: rotate(0deg) scale(1); } 25% { transform: rotate(-10deg) scale(1.06); } 50% { transform: rotate(8deg) scale(1.12); } 75% { transform: rotate(-6deg) scale(1.04); } }
-@keyframes iconBounce { 0%, 55%, 100% { transform: translateY(0); } 20% { transform: translateY(-10rpx) scale(1.08); } 36% { transform: translateY(2rpx) scale(0.98); } }
-@keyframes progressGlow { 0%, 100% { filter: saturate(1) brightness(1); } 50% { filter: saturate(1.12) brightness(1.05); } }
-@keyframes orbitSpin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
-@keyframes corePulse { from { transform: scale(0.96); } to { transform: scale(1.06); } }
-@keyframes floatMove { from { transform: translateY(0); } to { transform: translateY(-10rpx); } }
-@keyframes popupRise { from { opacity: 0; transform: translateY(40rpx) scale(0.96); } to { opacity: 1; transform: translateY(0) scale(1); } }
+.result-popup__name { display: block; margin-top: 24rpx; color: #2f251d; font-size: 72rpx; line-height: 1.04; font-weight: 800; letter-spacing: -1rpx; }
+.result-popup__vibe-badge { display: inline-flex; align-items: center; justify-content: center; margin-top: 18rpx; padding: 10rpx 20rpx; border-radius: 18rpx; font-size: 24rpx; font-weight: 700; }
+.result-popup__meta { display: block; margin-top: 24rpx; color: #aa9d93; font-size: 24rpx; line-height: 1.5; }
+.result-popup__divider { height: 2rpx; margin-top: 24rpx; background: linear-gradient(90deg, rgba(255,138,61,0) 0%, rgba(255,138,61,0.22) 50%, rgba(255,138,61,0) 100%); }
+.result-popup__label { display: block; margin-top: 22rpx; color: #9f9185; font-size: 22rpx; font-weight: 700; letter-spacing: 2rpx; }
+.result-popup__reason { display: block; margin-top: 14rpx; color: #403127; font-size: 32rpx; line-height: 1.6; font-weight: 600; }
+.result-popup__button { margin-top: 32rpx; border-radius: 28rpx; height: 92rpx; line-height: 92rpx; font-size: 30rpx; font-weight: 700; letter-spacing: 4rpx; }
+
+@keyframes chipBounceTap {
+  0% { transform: scale(1); }
+  35% { transform: translateY(-4rpx) scale(1.14); }
+  60% { transform: translateY(1rpx) scale(0.96); }
+  100% { transform: translateY(0) scale(1); }
+}
+
+@keyframes titleBreath {
+  0%, 100% { opacity: 0.92; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.03); }
+}
+
+@keyframes confettiWiggle {
+  0%, 100% { transform: rotate(0deg) scale(1); }
+  25% { transform: rotate(-10deg) scale(1.06); }
+  50% { transform: rotate(8deg) scale(1.12); }
+  75% { transform: rotate(-6deg) scale(1.04); }
+}
+
+@keyframes iconBounce {
+  0%, 55%, 100% { transform: translateY(0); }
+  20% { transform: translateY(-10rpx) scale(1.08); }
+  36% { transform: translateY(2rpx) scale(0.98); }
+}
+
+@keyframes progressGlow {
+  0%, 100% { filter: saturate(1) brightness(1); }
+  50% { filter: saturate(1.12) brightness(1.05); }
+}
+
+@keyframes orbitSpin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+@keyframes corePulse {
+  from { transform: scale(0.96); }
+  to { transform: scale(1.06); }
+}
+
+@keyframes floatMove {
+  from { transform: translateY(0); }
+  to { transform: translateY(-10rpx); }
+}
+
+@keyframes popupRise {
+  from { opacity: 0; transform: translateY(40rpx) scale(0.96); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
 </style>

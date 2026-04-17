@@ -8,9 +8,7 @@
 
     <view class="hero-card" :style="cardStyle">
       <text class="hero-title">普通版 / 校园版</text>
-      <text class="hero-desc">
-        校园版会切换成青绿色，并优先给你推荐校园食堂和周边好吃的；普通版保持暖橙色风格。
-      </text>
+      <text class="hero-desc">校园版会切成薄荷绿，更偏校园场景；普通版保留暖奶油风。</text>
     </view>
 
     <view class="mode-grid">
@@ -20,13 +18,13 @@
       </view>
       <view class="mode-card" :style="modeCardStyle('campus')" @click="selectedMode = 'campus'">
         <text class="mode-card__title">校园版</text>
-        <text class="mode-card__desc">切成青绿色，主打校内食堂和周边</text>
+        <text class="mode-card__desc">切成青绿色，主打校园场景</text>
       </view>
     </view>
 
     <view v-if="selectedMode === 'campus'" class="section-card" :style="cardStyle">
       <text class="section-title">当前已选校园</text>
-      <text class="section-desc">先显示你现在的选择，下面再按学校和校区慢慢挑</text>
+      <text class="section-desc">先看你现在的选择，下面再按学校慢慢挑。</text>
 
       <view class="current-campus-card" :style="selectedCardStyle">
         <view>
@@ -36,7 +34,7 @@
               {{ currentSelectedCampus.campusTag }}
             </text>
           </view>
-          <text class="school-meta">{{ currentSelectedCampus.district }} · {{ currentSelectedCampus.canteen || '校园版推荐' }}</text>
+          <text class="school-meta">{{ currentSelectedCampus.district }}</text>
         </view>
         <text class="school-selected" :style="accentTextStyle">已选择</text>
       </view>
@@ -52,7 +50,7 @@
       </view>
 
       <text class="section-title section-title--list">选择校园</text>
-      <text class="section-desc">校园越来越多时，先找学校，再展开选校区会更好找</text>
+      <text class="section-desc">只保留学校信息，先找学校，再展开选校区会更清楚。</text>
 
       <view v-if="filteredSchoolGroups.length" class="school-list">
         <view
@@ -67,7 +65,7 @@
                 <text class="school-name">{{ group.name }}</text>
                 <text class="school-status" :style="statusBadgeStyle(group)">{{ getGroupStatusLabel(group) }}</text>
               </view>
-              <text class="school-meta">{{ group.district }} · {{ getGroupMeta(group) }}</text>
+              <text class="school-meta">{{ group.district }}</text>
               <text class="school-tip">{{ getGroupTip(group) }}</text>
             </view>
             <text class="school-arrow" :style="accentTextStyle">
@@ -86,11 +84,9 @@
               <view>
                 <view class="school-title-row">
                   <text class="campus-option__title">{{ getCampusDisplayName(campus) }}</text>
-                  <text v-if="campus.campusTag" class="campus-option__mini-tag" :style="miniBadgeStyle">
-                    校区
-                  </text>
+                  <text v-if="campus.campusTag" class="campus-option__mini-tag" :style="miniBadgeStyle">校区</text>
                 </view>
-                <text class="campus-option__meta">{{ campus.district }} · {{ campus.canteen || '校园版推荐' }}</text>
+                <text class="campus-option__meta">{{ campus.district }}</text>
               </view>
               <text class="campus-option__pick" :style="accentTextStyle">
                 {{ selectedCampusId === campus.id ? '已选' : '选择' }}
@@ -102,7 +98,7 @@
 
       <view v-else class="empty-search">
         <text class="empty-search__title">没有搜到对应校园</text>
-        <text class="empty-search__desc">换个学校名、校区名或者城市关键词试试</text>
+        <text class="empty-search__desc">换个学校名、校区名或者城市关键词试试。</text>
       </view>
     </view>
 
@@ -146,13 +142,8 @@ function refreshPage() {
   ensureExpandedForSelection()
 }
 
-onLoad(() => {
-  refreshPage()
-})
-
-onShow(() => {
-  refreshPage()
-})
+onLoad(refreshPage)
+onShow(refreshPage)
 
 const theme = computed(() => getTheme(selectedMode.value))
 const currentSelectedCampus = computed(() => getCampusById(selectedCampusId.value))
@@ -196,8 +187,7 @@ const filteredSchoolGroups = computed(() => {
         const searchPool = [
           campus.name,
           campus.campusTag,
-          campus.district,
-          campus.canteen
+          campus.district
         ].join(' ').toLowerCase()
 
         return searchPool.includes(keyword)
@@ -305,17 +295,9 @@ function getGroupStatusLabel(group) {
   return '筹备中'
 }
 
-function getGroupMeta(group) {
-  if (group.items.length > 1) {
-    return `${group.items.length} 个校区可选`
-  }
-
-  return group.items[0].canteen || '校园版推荐'
-}
-
 function getGroupTip(group) {
   if (group.items.length > 1) {
-    return '点开后按校区选择，后面校园再多也不会乱'
+    return `${group.items.length} 个校区可选`
   }
 
   return getCampusDisplayName(group.items[0])

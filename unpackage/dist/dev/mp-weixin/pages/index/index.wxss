@@ -170,7 +170,6 @@ button:active,
   color: #3d3026;
   font-size: 42rpx;
   font-weight: 700;
-  animation: titleBreath 2.3s ease-in-out infinite;
   transform-origin: left center;
 }
 .fortune-note {
@@ -190,7 +189,6 @@ button:active,
 }
 .fortune-badge__icon {
   font-size: 30rpx;
-  animation: confettiWiggle 1.8s ease-in-out infinite;
 }
 .fortune-grid {
   display: flex;
@@ -212,12 +210,6 @@ button:active,
 .fortune-icon--one {
   animation: iconBounce 1.9s ease-in-out infinite;
 }
-.fortune-icon--two {
-  animation: iconBounce 1.9s ease-in-out 0.18s infinite;
-}
-.fortune-icon--three {
-  animation: iconBounce 1.9s ease-in-out 0.36s infinite;
-}
 .fortune-name {
   color: #9e938a;
   font-size: 24rpx;
@@ -237,7 +229,6 @@ button:active,
   height: 100%;
   border-radius: inherit;
   transition: width 0.5s cubic-bezier(0.22, 1, 0.36, 1);
-  animation: progressGlow 2.2s ease-in-out infinite;
 }
 .fortune-tip {
   display: flex;
@@ -407,52 +398,57 @@ button:active,
   display: block;
   margin-top: 24rpx;
   color: #2f251d;
-  font-size: 64rpx;
-  line-height: 1.1;
-  font-weight: 700;
+  font-size: 72rpx;
+  line-height: 1.04;
+  font-weight: 800;
+  letter-spacing: -1rpx;
 }
-.result-popup__vibe {
-  display: block;
-  margin-top: 14rpx;
-  color: #6f5d50;
-  font-size: 30rpx;
-  font-weight: 600;
+.result-popup__vibe-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 18rpx;
+  padding: 10rpx 20rpx;
+  border-radius: 18rpx;
+  font-size: 24rpx;
+  font-weight: 700;
 }
 .result-popup__meta {
   display: block;
-  margin-top: 22rpx;
-  color: #9b8d82;
-  font-size: 26rpx;
-  line-height: 1.6;
+  margin-top: 24rpx;
+  color: #aa9d93;
+  font-size: 24rpx;
+  line-height: 1.5;
 }
 .result-popup__divider {
   height: 2rpx;
   margin-top: 24rpx;
-  background: linear-gradient(90deg, rgba(255, 138, 61, 0) 0%, rgba(255, 138, 61, 0.3) 50%, rgba(255, 138, 61, 0) 100%);
+  background: linear-gradient(90deg, rgba(255, 138, 61, 0) 0%, rgba(255, 138, 61, 0.22) 50%, rgba(255, 138, 61, 0) 100%);
 }
 .result-popup__label {
   display: block;
   margin-top: 22rpx;
-  color: #8b7a6d;
-  font-size: 24rpx;
+  color: #9f9185;
+  font-size: 22rpx;
   font-weight: 700;
   letter-spacing: 2rpx;
 }
 .result-popup__reason {
   display: block;
   margin-top: 14rpx;
-  color: #4d3a2e;
-  font-size: 34rpx;
-  line-height: 1.45;
-  font-weight: 700;
+  color: #403127;
+  font-size: 32rpx;
+  line-height: 1.6;
+  font-weight: 600;
 }
 .result-popup__button {
-  margin-top: 30rpx;
+  margin-top: 32rpx;
   border-radius: 28rpx;
-  height: 88rpx;
-  line-height: 88rpx;
+  height: 92rpx;
+  line-height: 92rpx;
   font-size: 30rpx;
   font-weight: 700;
+  letter-spacing: 4rpx;
 }
 @keyframes chipBounceTap {
 0% {

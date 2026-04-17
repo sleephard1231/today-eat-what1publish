@@ -10,14 +10,11 @@ const _sfc_main = {
     const isDrawing = common_vendor.ref(false);
     const showResultPopup = common_vendor.ref(false);
     const popupResult = common_vendor.ref(null);
-    const popupRevealStage = common_vendor.ref(0);
     const bouncingChip = common_vendor.ref("");
     const animatedAppetiteProgress = common_vendor.ref(0);
     const animatedEnergyProgress = common_vendor.ref(0);
     const animatedLuckProgress = common_vendor.ref(0);
     let drawTimer = null;
-    let revealTimerOne = null;
-    let revealTimerTwo = null;
     let progressTimer = null;
     let chipBounceTimer = null;
     const theme = common_vendor.computed(() => utils_appState.getTheme(state.value.mode));
@@ -35,13 +32,7 @@ const _sfc_main = {
     function clearRevealTimers() {
       if (drawTimer)
         clearTimeout(drawTimer);
-      if (revealTimerOne)
-        clearTimeout(revealTimerOne);
-      if (revealTimerTwo)
-        clearTimeout(revealTimerTwo);
       drawTimer = null;
-      revealTimerOne = null;
-      revealTimerTwo = null;
     }
     function clearProgressTimer() {
       if (progressTimer)
@@ -73,18 +64,37 @@ const _sfc_main = {
     function buildRevealReason(result) {
       if (!result)
         return "";
-      return state.value.mode === "campus" ? `${result.canteen} 这口最对你今天的状态。` : `${result.vibe}，今天就该吃这一口。`;
+      if (result.reason) {
+        return result.reason;
+      }
+      if (state.value.mode === "campus") {
+        return `${result.canteen || "这家饭堂"} 这口，会比较对你今天的状态。`;
+      }
+      return `${result.mealName} 今天会比平时更顺口。`;
     }
     function buildMiniProgressStyle(percent) {
-      const isCampusMode = state.value.mode === "campus";
+      const t = theme.value;
       return {
         width: `${percent}%`,
-        background: isCampusMode ? "linear-gradient(90deg, #67b6a0 0%, #67b6a0 100%)" : "linear-gradient(90deg, #ff9b5a 0%, #ff7a2f 100%)",
-        boxShadow: isCampusMode ? "0 6rpx 14rpx rgba(103, 182, 160, 0.18)" : "0 6rpx 14rpx rgba(255, 122, 47, 0.18)"
+        background: `linear-gradient(90deg, ${t.accent} 0%, ${t.accentDeep} 100%)`,
+        boxShadow: `0 6rpx 14rpx ${t.accent}30`
       };
     }
-    const miniProgressTrackStyle = common_vendor.computed(() => state.value.mode === "campus" ? { background: "rgba(103, 182, 160, 0.18)", boxShadow: "inset 0 0 0 1rpx rgba(103, 182, 160, 0.08)" } : { background: "rgba(255, 122, 47, 0.14)", boxShadow: "inset 0 0 0 1rpx rgba(255, 122, 47, 0.06)" });
+    const miniProgressTrackStyle = common_vendor.computed(() => {
+      const t = theme.value;
+      return {
+        background: `${t.accent}24`,
+        boxShadow: `inset 0 0 0 1rpx ${t.accent}14`
+      };
+    });
     const popupRevealReason = common_vendor.computed(() => buildRevealReason(popupResult.value));
+    const popupMetaText = common_vendor.computed(() => {
+      if (!popupResult.value)
+        return "";
+      if (popupResult.value.mode !== "campus")
+        return "";
+      return [popupResult.value.campusName, popupResult.value.canteen].filter(Boolean).join(" · ");
+    });
     const appetiteProgressStyle = common_vendor.computed(() => buildMiniProgressStyle(animatedAppetiteProgress.value));
     const energyProgressStyle = common_vendor.computed(() => buildMiniProgressStyle(animatedEnergyProgress.value));
     const luckProgressStyle = common_vendor.computed(() => buildMiniProgressStyle(animatedLuckProgress.value));
@@ -109,6 +119,13 @@ const _sfc_main = {
       boxShadow: theme.value.shadow,
       border: `1px solid ${theme.value.border}`
     }));
+    const vibeBadgeStyle = common_vendor.computed(() => {
+      const t = theme.value;
+      return {
+        color: t.accentDeep,
+        background: `${t.accent}20`
+      };
+    });
     function triggerChipBounce(type) {
       clearChipBounceTimer();
       bouncingChip.value = type;
@@ -121,7 +138,6 @@ const _sfc_main = {
       if (isDrawing.value)
         return;
       clearRevealTimers();
-      popupRevealStage.value = 0;
       showResultPopup.value = false;
       const drawResult = utils_appState.drawMealResult();
       state.value = drawResult.state;
@@ -136,17 +152,11 @@ const _sfc_main = {
       drawTimer = setTimeout(() => {
         isDrawing.value = false;
         showResultPopup.value = true;
-        popupRevealStage.value = 1;
         drawTimer = null;
-        revealTimerOne = setTimeout(() => {
-          popupRevealStage.value = 2;
-          revealTimerOne = null;
-        }, 220);
       }, 1500);
     }
     function closeResultPopup() {
       showResultPopup.value = false;
-      popupRevealStage.value = 0;
       clearRevealTimers();
     }
     common_vendor.onLoad(refreshState);
@@ -162,13 +172,13 @@ const _sfc_main = {
         b: bouncingChip.value === "campus" ? 1 : "",
         c: common_vendor.t(campusChipLabel.value),
         d: common_vendor.s(accentFillStyle.value),
-        e: common_vendor.o(($event) => triggerChipBounce("campus"), "71"),
+        e: common_vendor.o(($event) => triggerChipBounce("campus"), "68"),
         f: bouncingChip.value === "mbti" ? 1 : "",
         g: common_vendor.t(state.value.profile.mbti),
-        h: common_vendor.o(($event) => triggerChipBounce("mbti"), "a8"),
+        h: common_vendor.o(($event) => triggerChipBounce("mbti"), "43"),
         i: bouncingChip.value === "zodiac" ? 1 : "",
         j: common_vendor.t(state.value.profile.zodiac),
-        k: common_vendor.o(($event) => triggerChipBounce("zodiac"), "5f"),
+        k: common_vendor.o(($event) => triggerChipBounce("zodiac"), "79"),
         l: common_vendor.s(accentTextStyle.value),
         m: `${common_vendor.unref(statusBarHeight) + 16}px`,
         n: common_vendor.t(fortune.value.dateLabel),
@@ -189,31 +199,32 @@ const _sfc_main = {
         D: common_vendor.t(fortune.value.tasteText),
         E: common_vendor.s(cardStyle.value),
         F: common_vendor.s(accentFillStyle.value),
-        G: common_vendor.o(handleDrawMeal, "8a"),
+        G: common_vendor.o(handleDrawMeal, "8f"),
         H: isDrawing.value
       }, isDrawing.value ? {
         I: common_vendor.s(accentFillStyle.value),
         J: common_vendor.s(cardStyle.value)
       } : {}, {
         K: showResultPopup.value && popupResult.value
-      }, showResultPopup.value && popupResult.value ? {
+      }, showResultPopup.value && popupResult.value ? common_vendor.e({
         L: common_vendor.t(state.value.mode === "campus" ? "校园版推荐" : "普通版推荐"),
         M: common_vendor.t(popupResult.value.createdAt),
         N: common_vendor.t(popupResult.value.mealName),
         O: common_vendor.t(popupResult.value.vibe),
-        P: popupRevealStage.value >= 1 ? 1 : "",
-        Q: common_vendor.t(popupResult.value.campusName),
-        R: common_vendor.t(popupResult.value.canteen),
-        S: common_vendor.t(popupRevealReason.value),
-        T: popupRevealStage.value >= 2 ? 1 : "",
-        U: common_vendor.s(accentFillStyle.value),
-        V: common_vendor.o(closeResultPopup, "c7"),
-        W: common_vendor.s(popupCardStyle.value),
-        X: common_vendor.o(() => {
-        }, "2d"),
-        Y: common_vendor.o(closeResultPopup, "95")
+        P: common_vendor.s(vibeBadgeStyle.value),
+        Q: popupMetaText.value
+      }, popupMetaText.value ? {
+        R: common_vendor.t(popupMetaText.value)
       } : {}, {
-        Z: common_vendor.s(pageStyle.value)
+        S: common_vendor.t(popupRevealReason.value),
+        T: common_vendor.s(accentFillStyle.value),
+        U: common_vendor.o(closeResultPopup, "93"),
+        V: common_vendor.s(popupCardStyle.value),
+        W: common_vendor.o(() => {
+        }, "9d"),
+        X: common_vendor.o(closeResultPopup, "fb")
+      }) : {}, {
+        Y: common_vendor.s(pageStyle.value)
       });
     };
   }

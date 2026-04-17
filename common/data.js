@@ -207,3 +207,13 @@ export const genericFoods = [
 export const energyLevelLabels = ['蓄力', '平稳', '充沛', '爆表']
 export const appetiteLabels = ['清淡', '适中', '旺盛', '狂炫']
 export const luckLabels = ['小吉', '中吉', '大吉', '锦鲤']
+
+// 登录弹窗文案
+export const loginTitle = '欢迎来到吃什么'
+export const loginDesc = '点击下方按钮，授权获取微信头像和昵称'
+export const loginButtonText = '授权微信登录'
+
+// 退出登录确认文案
+export const logoutConfirmTitle = '确定退出登录？'
+export const logoutConfirmDesc = '退出后你的个性化推荐记录会保留'
+

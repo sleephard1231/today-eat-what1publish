@@ -49,8 +49,8 @@ const _sfc_main = {
       boxShadow: theme.value.shadow,
       border: `1px solid ${theme.value.border}`
     }));
-    const selectionAccent = common_vendor.computed(() => state.value.mode === "campus" ? "#2e9f82" : "#ff7a2f");
-    const selectionSoft = common_vendor.computed(() => state.value.mode === "campus" ? "#e8f5f2" : "#fff0df");
+    const selectionAccent = common_vendor.computed(() => theme.value.accent);
+    const selectionSoft = common_vendor.computed(() => theme.value.accentSoft);
     const selectionStateStyle = common_vendor.computed(() => ({
       background: hasPendingChanges.value ? selectionSoft.value : "rgba(255, 255, 255, 0.82)",
       border: `1px solid ${hasPendingChanges.value ? selectionAccent.value : theme.value.border}`
@@ -66,7 +66,7 @@ const _sfc_main = {
       border: `1px solid ${theme.value.border}`
     }));
     const canteenGlowStyle = common_vendor.computed(() => ({
-      background: state.value.mode === "campus" ? "radial-gradient(circle, rgba(103, 182, 160, 0.18) 0%, rgba(103, 182, 160, 0) 72%)" : "radial-gradient(circle, rgba(255, 156, 91, 0.24) 0%, rgba(255, 156, 91, 0) 72%)"
+      background: `radial-gradient(circle, ${theme.value.accent}30 0%, ${theme.value.accent}00 72%)`
     }));
     const saveButtonStyle = common_vendor.computed(() => ({
       background: `linear-gradient(135deg, ${theme.value.accent} 0%, ${theme.value.accentDeep} 100%)`,
@@ -169,17 +169,19 @@ ${canteenNames.join("、")}` : "确认恢复默认范围吗？\n保存后会在�
             k: common_vendor.o(($event) => handleSelectCanteen(canteen), canteen.id)
           });
         })
-      } : {}, {
+      } : {
         m: common_vendor.s(cardStyle.value)
+      }, {
+        n: common_vendor.s(cardStyle.value)
       }) : {}, {
-        n: state.value.mode === "campus"
+        o: state.value.mode === "campus"
       }, state.value.mode === "campus" ? {
-        o: common_vendor.s(ghostButtonStyle.value),
-        p: common_vendor.o(handleClearSelection, "68"),
-        q: common_vendor.s(saveButtonStyle.value),
-        r: common_vendor.o(handleSaveSelection, "22")
+        p: common_vendor.s(ghostButtonStyle.value),
+        q: common_vendor.o(handleClearSelection, "b4"),
+        r: common_vendor.s(saveButtonStyle.value),
+        s: common_vendor.o(handleSaveSelection, "97")
       } : {}, {
-        s: common_vendor.s(pageStyle.value)
+        t: common_vendor.s(pageStyle.value)
       });
     };
   }

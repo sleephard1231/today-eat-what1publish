@@ -21,12 +21,8 @@ const _sfc_main = {
       campusList.value = utils_appState.getCampusList();
       ensureExpandedForSelection();
     }
-    common_vendor.onLoad(() => {
-      refreshPage();
-    });
-    common_vendor.onShow(() => {
-      refreshPage();
-    });
+    common_vendor.onLoad(refreshPage);
+    common_vendor.onShow(refreshPage);
     const theme = common_vendor.computed(() => utils_appState.getTheme(selectedMode.value));
     const currentSelectedCampus = common_vendor.computed(() => utils_appState.getCampusById(selectedCampusId.value));
     const schoolGroups = common_vendor.computed(() => {
@@ -59,8 +55,7 @@ const _sfc_main = {
           const searchPool = [
             campus.name,
             campus.campusTag,
-            campus.district,
-            campus.canteen
+            campus.district
           ].join(" ").toLowerCase();
           return searchPool.includes(keyword);
         });
@@ -146,15 +141,9 @@ const _sfc_main = {
       }
       return "筹备中";
     }
-    function getGroupMeta(group) {
-      if (group.items.length > 1) {
-        return `${group.items.length} 个校区可选`;
-      }
-      return group.items[0].canteen || "校园版推荐";
-    }
     function getGroupTip(group) {
       if (group.items.length > 1) {
-        return "点开后按校区选择，后面校园再多也不会乱";
+        return `${group.items.length} 个校区可选`;
       }
       return getCampusDisplayName(group.items[0]);
     }
@@ -203,9 +192,9 @@ const _sfc_main = {
         b: `${common_vendor.unref(statusBarHeight) + 12}px`,
         c: common_vendor.s(cardStyle.value),
         d: common_vendor.s(modeCardStyle("normal")),
-        e: common_vendor.o(($event) => selectedMode.value = "normal", "0c"),
+        e: common_vendor.o(($event) => selectedMode.value = "normal", "0a"),
         f: common_vendor.s(modeCardStyle("campus")),
-        g: common_vendor.o(($event) => selectedMode.value = "campus", "46"),
+        g: common_vendor.o(($event) => selectedMode.value = "campus", "a0"),
         h: selectedMode.value === "campus"
       }, selectedMode.value === "campus" ? common_vendor.e({
         i: common_vendor.t(currentSelectedCampus.value.name),
@@ -215,26 +204,24 @@ const _sfc_main = {
         l: common_vendor.s(badgeStyle.value)
       } : {}, {
         m: common_vendor.t(currentSelectedCampus.value.district),
-        n: common_vendor.t(currentSelectedCampus.value.canteen || "校园版推荐"),
-        o: common_vendor.s(accentTextStyle.value),
-        p: common_vendor.s(selectedCardStyle.value),
-        q: searchKeyword.value,
-        r: common_vendor.o(($event) => searchKeyword.value = $event.detail.value, "44"),
-        s: filteredSchoolGroups.value.length
+        n: common_vendor.s(accentTextStyle.value),
+        o: common_vendor.s(selectedCardStyle.value),
+        p: searchKeyword.value,
+        q: common_vendor.o(($event) => searchKeyword.value = $event.detail.value, "72"),
+        r: filteredSchoolGroups.value.length
       }, filteredSchoolGroups.value.length ? {
-        t: common_vendor.f(filteredSchoolGroups.value, (group, k0, i0) => {
+        s: common_vendor.f(filteredSchoolGroups.value, (group, k0, i0) => {
           return common_vendor.e({
             a: common_vendor.t(group.name),
             b: common_vendor.t(getGroupStatusLabel(group)),
             c: common_vendor.s(statusBadgeStyle(group)),
             d: common_vendor.t(group.district),
-            e: common_vendor.t(getGroupMeta(group)),
-            f: common_vendor.t(getGroupTip(group)),
-            g: common_vendor.t(group.items.length > 1 ? expandedSchoolKey.value === group.key ? "收起" : "展开" : "选择"),
-            h: common_vendor.o(($event) => handleGroupClick(group), group.key),
-            i: group.items.length > 1 && expandedSchoolKey.value === group.key
+            e: common_vendor.t(getGroupTip(group)),
+            f: common_vendor.t(group.items.length > 1 ? expandedSchoolKey.value === group.key ? "收起" : "展开" : "选择"),
+            g: common_vendor.o(($event) => handleGroupClick(group), group.key),
+            h: group.items.length > 1 && expandedSchoolKey.value === group.key
           }, group.items.length > 1 && expandedSchoolKey.value === group.key ? {
-            j: common_vendor.f(group.items, (campus, k1, i1) => {
+            i: common_vendor.f(group.items, (campus, k1, i1) => {
               return common_vendor.e({
                 a: common_vendor.t(getCampusDisplayName(campus)),
                 b: campus.campusTag
@@ -242,28 +229,27 @@ const _sfc_main = {
                 c: common_vendor.s(miniBadgeStyle.value)
               } : {}, {
                 d: common_vendor.t(campus.district),
-                e: common_vendor.t(campus.canteen || "校园版推荐"),
-                f: common_vendor.t(selectedCampusId.value === campus.id ? "已选" : "选择"),
-                g: campus.id,
-                h: common_vendor.s(campusOptionStyle(campus.id)),
-                i: common_vendor.o(($event) => selectedCampusId.value = campus.id, campus.id)
+                e: common_vendor.t(selectedCampusId.value === campus.id ? "已选" : "选择"),
+                f: campus.id,
+                g: common_vendor.s(campusOptionStyle(campus.id)),
+                h: common_vendor.o(($event) => selectedCampusId.value = campus.id, campus.id)
               });
             }),
-            k: common_vendor.s(accentTextStyle.value)
+            j: common_vendor.s(accentTextStyle.value)
           } : {}, {
-            l: group.key,
-            m: common_vendor.s(schoolGroupStyle(group))
+            k: group.key,
+            l: common_vendor.s(schoolGroupStyle(group))
           });
         }),
-        v: common_vendor.s(accentTextStyle.value)
+        t: common_vendor.s(accentTextStyle.value)
       } : {}, {
-        w: common_vendor.s(cardStyle.value)
+        v: common_vendor.s(cardStyle.value)
       }) : {}, {
-        x: common_vendor.s(accentFillStyle.value),
-        y: common_vendor.o(saveSelection, "50"),
-        z: common_vendor.s(subtleCardStyle.value),
-        A: common_vendor.o(goJoinPage, "5c"),
-        B: common_vendor.s(pageStyle.value)
+        w: common_vendor.s(accentFillStyle.value),
+        x: common_vendor.o(saveSelection, "26"),
+        y: common_vendor.s(subtleCardStyle.value),
+        z: common_vendor.o(goJoinPage, "5a"),
+        A: common_vendor.s(pageStyle.value)
       });
     };
   }
