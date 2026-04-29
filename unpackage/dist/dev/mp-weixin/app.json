@@ -6,7 +6,10 @@
     "pages/campus/join",
     "pages/history/index",
     "pages/canteen/canteen",
-    "pages/service/service"
+    "pages/canteen/detail",
+    "pages/canteen/stall",
+    "pages/service/service",
+    "pages/webview/index"
   ],
   "window": {
     "navigationBarTextStyle": "black",

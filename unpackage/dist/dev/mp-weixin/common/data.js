@@ -40,22 +40,6 @@ const presetCampuses = [
     district: "广州",
     canteen: "西苑食堂",
     specialties: ["煲仔饭", "鸡腿饭", "汤粉", "糖水"]
-  },
-  {
-    id: "scut",
-    name: "华南理工大学",
-    shortName: "华工",
-    district: "广州",
-    canteen: "启林南美食城",
-    specialties: ["潮汕牛肉粿条", "咖喱鸡排饭", "麻辣香锅", "轻食沙拉"]
-  },
-  {
-    id: "gdufs",
-    name: "广东外语外贸大学",
-    shortName: "广外",
-    district: "广州",
-    canteen: "云山食堂",
-    specialties: ["芝士焗饭", "酸汤肥牛", "椰子鸡", "鲜虾云吞面"]
   }
 ];
 const campusCanteenMap = {
@@ -67,24 +51,6 @@ const campusCanteenMap = {
     { id: "gzcc-tongxin", name: "同心", remark: "轻食、小碗菜、简餐" },
     { id: "gzcc-snack", name: "小吃街", remark: "夜宵、小吃、饮品" },
     { id: "gzcc-other", name: "其他", remark: "临时开放窗口 / 其他区域" }
-  ],
-  "广州大学": [
-    { id: "gzu-shangzhong", name: "商中路食堂", remark: "一楼、二楼、夜宵档" },
-    { id: "gzu-first", name: "学生第一食堂", remark: "大众窗口、炖汤区" },
-    { id: "gzu-south", name: "南区食堂", remark: "轻食、面档、特色饭" }
-  ],
-  "华南师范": [
-    { id: "scnu-taoli", name: "桃李园食堂", remark: "一楼快餐、二楼小炒" },
-    { id: "scnu-west", name: "西区食堂", remark: "面食、砂锅、夜宵" }
-  ],
-  "华南理工大学": [
-    { id: "scut-qilin", name: "启林南美食城", remark: "轻食、砂锅、炒菜档" },
-    { id: "scut-west", name: "西区食堂", remark: "快餐、炖汤、夜宵档" },
-    { id: "scut-east", name: "东区食堂", remark: "面档、麻辣烫、甜品" }
-  ],
-  "广东外语外贸大学": [
-    { id: "gdufs-yunshan", name: "云山食堂", remark: "盖饭、汤面、甜品区" },
-    { id: "gdufs-west", name: "西区食堂", remark: "广式、轻食、小炒" }
   ]
 };
 const campusServiceMap = {
@@ -94,12 +60,6 @@ const campusServiceMap = {
     { id: "gzcc-storage", icon: "🧸", name: "宿舍收纳", remark: "桌面衣柜整理服务" },
     { id: "gzcc-cleaning", icon: "🧹", name: "宿舍打扫", remark: "日常清洁和深度打扫" },
     { id: "gzcc-repair", icon: "💻", name: "电脑维修", remark: "常见软件硬件排查" }
-  ],
-  "广州大学": [
-    { id: "gzu-errand", icon: "🏃", name: "校园跑腿", remark: "课间帮拿帮送更方便" },
-    { id: "gzu-express", icon: "📦", name: "快递代拿", remark: "宿舍区代取更省时间" },
-    { id: "gzu-print", icon: "🖨️", name: "校园打印", remark: "资料文档快速打印" },
-    { id: "gzu-bike", icon: "🚲", name: "单车维修", remark: "补胎调链日常保养" }
   ]
 };
 const themeMap = {
@@ -109,13 +69,10 @@ const themeMap = {
     accent: "#ff8a3d",
     accentDeep: "#ff6b2c",
     accentSoft: "#fff0df",
-    accentMute: "#ffe6cf",
     pageStart: "#fffaf3",
     pageEnd: "#fff7ef",
     card: "#fff5e8",
     cardStrong: "#fff0dd",
-    textMain: "#403126",
-    textSub: "#a79b90",
     border: "rgba(255, 138, 61, 0.14)",
     shadow: "0 18rpx 44rpx rgba(255, 138, 61, 0.16)",
     tabSelected: "#ff8a3d"
@@ -126,13 +83,10 @@ const themeMap = {
     accent: "#67b6a0",
     accentDeep: "#4f9f8a",
     accentSoft: "#edf7f1",
-    accentMute: "#e4f1ea",
     pageStart: "#f8fcf8",
     pageEnd: "#fff8ef",
     card: "#f8fbf6",
     cardStrong: "#f1f7f2",
-    textMain: "#325048",
-    textSub: "#88a098",
     border: "rgba(103, 182, 160, 0.15)",
     shadow: "0 18rpx 44rpx rgba(103, 182, 160, 0.14)",
     tabSelected: "#67b6a0"

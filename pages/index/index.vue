@@ -151,7 +151,7 @@ import { onLoad, onShow, onUnload } from '@dcloudio/uni-app'
 import { appetiteLabels, energyLevelLabels, luckLabels } from '@/common/data.js'
 import { applyTabBarTheme, drawMealResult, getAppState, getCampusById, getTheme, getTodayFortune } from '@/utils/app-state.js'
 
-const statusBarHeight = uni.getSystemInfoSync().statusBarHeight || 20
+const statusBarHeight = uni.getWindowInfo().statusBarHeight || 20
 const state = ref(getAppState())
 const isDrawing = ref(false)
 const showResultPopup = ref(false)
@@ -308,7 +308,7 @@ function handleDrawMeal() {
   animateFortuneProgress()
 
   if (drawResult.exhausted) {
-    uni.showToast({ title: '今天的占卜次数用完了', icon: 'none' })
+    uni.showToast({ title: '今天的使用次数用完了', icon: 'none' })
     return
   }
 
@@ -405,27 +405,10 @@ onUnload(() => {
   100% { transform: translateY(0) scale(1); }
 }
 
-@keyframes titleBreath {
-  0%, 100% { opacity: 0.92; transform: scale(1); }
-  50% { opacity: 1; transform: scale(1.03); }
-}
-
-@keyframes confettiWiggle {
-  0%, 100% { transform: rotate(0deg) scale(1); }
-  25% { transform: rotate(-10deg) scale(1.06); }
-  50% { transform: rotate(8deg) scale(1.12); }
-  75% { transform: rotate(-6deg) scale(1.04); }
-}
-
 @keyframes iconBounce {
   0%, 55%, 100% { transform: translateY(0); }
   20% { transform: translateY(-10rpx) scale(1.08); }
   36% { transform: translateY(2rpx) scale(0.98); }
-}
-
-@keyframes progressGlow {
-  0%, 100% { filter: saturate(1) brightness(1); }
-  50% { filter: saturate(1.12) brightness(1.05); }
 }
 
 @keyframes orbitSpin {

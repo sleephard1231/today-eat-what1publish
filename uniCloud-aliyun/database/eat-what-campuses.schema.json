@@ -1,0 +1,66 @@
+{
+  "bsonType": "object",
+  "required": ["name"],
+  "permission": {
+    "read": true,
+    "create": false,
+    "update": false,
+    "delete": false
+  },
+  "properties": {
+    "_id": {
+      "description": "校园ID，如 gzcc"
+    },
+    "name": {
+      "bsonType": "string",
+      "description": "学校全称，如 广州商学院",
+      "title": "学校名称"
+    },
+    "shortName": {
+      "bsonType": "string",
+      "description": "学校简称，如 广商",
+      "title": "简称"
+    },
+    "campusTag": {
+      "bsonType": "string",
+      "description": "校区标志，如 北校区 / 大学城校区",
+      "title": "校区标志"
+    },
+    "district": {
+      "bsonType": "string",
+      "description": "所在城市/区域",
+      "title": "区域"
+    },
+    "specialties": {
+      "bsonType": "array",
+      "description": "特色菜列表",
+      "title": "特色菜",
+      "items": {
+        "bsonType": "string"
+      }
+    },
+    "status": {
+      "bsonType": "string",
+      "description": "状态",
+      "enum": ["active", "inactive"],
+      "defaultValue": "active",
+      "title": "状态"
+    },
+    "createdAt": {
+      "bsonType": "timestamp",
+      "description": "创建时间",
+      "title": "创建时间",
+      "forceDefaultValue": {
+        "$env": "now"
+      }
+    },
+    "updatedAt": {
+      "bsonType": "timestamp",
+      "description": "更新时间",
+      "title": "更新时间",
+      "forceDefaultValue": {
+        "$env": "now"
+      }
+    }
+  }
+}

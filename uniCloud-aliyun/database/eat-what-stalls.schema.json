@@ -1,0 +1,63 @@
+{
+  "bsonType": "object",
+  "required": ["canteenId", "name"],
+  "permission": {
+    "read": true,
+    "create": false,
+    "update": false,
+    "delete": false
+  },
+  "properties": {
+    "_id": {
+      "description": "档口ID"
+    },
+    "canteenId": {
+      "bsonType": "string",
+      "description": "所属饭堂ID",
+      "title": "饭堂ID"
+    },
+    "name": {
+      "bsonType": "string",
+      "description": "档口名称",
+      "title": "档口名称"
+    },
+    "category": {
+      "bsonType": "string",
+      "description": "分类，如 盖饭/粉面/小炒",
+      "title": "分类"
+    },
+    "remark": {
+      "bsonType": "string",
+      "description": "备注/描述",
+      "title": "备注"
+    },
+    "sort": {
+      "bsonType": "int",
+      "description": "排序权重",
+      "title": "排序"
+    },
+    "status": {
+      "bsonType": "string",
+      "description": "状态",
+      "enum": ["active", "inactive"],
+      "defaultValue": "active",
+      "title": "状态"
+    },
+    "createdAt": {
+      "bsonType": "timestamp",
+      "description": "创建时间",
+      "title": "创建时间",
+      "forceDefaultValue": {
+        "$env": "now"
+      }
+    },
+    "updatedAt": {
+      "bsonType": "timestamp",
+      "description": "更新时间",
+      "title": "更新时间",
+      "forceDefaultValue": {
+        "$env": "now"
+      }
+    }
+  }
+}

@@ -10,6 +10,17 @@ import {
   themeMap,
   zodiacFortuneMap
 } from '@/common/data.js'
+import {
+  cloudSyncState,
+  cloudGetState,
+  cloudSyncHistory,
+  cloudGetHistory,
+  cloudGetApprovedCampuses,
+  cloudSubmitApplication,
+  cloudCheckText,
+  aiGenerateReason
+} from '@/utils/cloud.js'
+import { isCloudUser, getUser } from '@/utils/user-state.js'
 
 const STATE_KEY = 'eat-what-state'
 const HISTORY_KEY = 'eat-what-history'
@@ -199,6 +210,49 @@ function buildReason({ state, pickedFood, selectedCanteenNames, seed }) {
   return `${state.profile.mbti} 的 ${flavorWord}，刚好接住 ${state.profile.zodiac} 今天的 ${zodiacWord}。随机刷到 ${pickedFood.name}，这一口会比较对你现在的状态。`
 }
 
+/**
+ * AI 生成推荐理由（异步）
+ * 先返回模板理由确保即时显示，后台调 AI，成功后替换
+ * @param {object} context - AI 推荐上下文
+ * @returns {Promise<{ reason: string, isAI: boolean }>}
+ */
+export async function aiGenerateReasonForMeal(context = {}) {
+  // 1. 先用模板生成兜底理由（即时可用）
+  const fallbackReason = buildReason(context)
+
+  // 2. 如果不是云端用户或未配置 AI Key，直接返回模板
+  if (!isCloudUser()) {
+    return { reason: fallbackReason, isAI: false }
+  }
+
+  // 3. 异步调用 AI
+  try {
+    const fortune = getTodayFortune()
+    const aiContext = {
+      mbti: context.state?.profile?.mbti || 'ENFJ',
+      zodiac: context.state?.profile?.zodiac || '白羊座',
+      mode: context.state?.mode || 'normal',
+      campusName: context.campusName || '',
+      canteenName: context.pickedFood?.canteen || '',
+      foodName: context.pickedFood?.name || '',
+      foodVibe: context.pickedFood?.vibe || '',
+      appetite: fortune.appetite,
+      energy: fortune.energy,
+      luck: fortune.luck
+    }
+
+    const aiResult = await aiGenerateReason(aiContext)
+    if (aiResult.code === 0 && aiResult.reason) {
+      return { reason: aiResult.reason, isAI: true }
+    }
+  } catch (err) {
+    console.warn('[app-state] aiGenerateReasonForMeal failed', err)
+  }
+
+  // 4. AI 失败则降级为模板
+  return { reason: fallbackReason, isAI: false }
+}
+
 export function getCampusList() {
   return [...presetCampuses, ...createDynamicCampuses()]
 }
@@ -276,7 +330,54 @@ export function saveAppState(patch = {}) {
 
   safeWrite(STATE_KEY, nextState)
   uni.$emit('app-state-changed')
+
+  // 云端同步（异步，不阻塞本地操作）
+  syncStateToCloud(nextState)
+
   return nextState
+}
+
+// ====== 云端同步防抖 ======
+let syncStateTimer = null
+let pendingStateData = null
+const SYNC_DEBOUNCE_MS = 3000 // 3 秒内多次改动只同步最后一次
+
+let syncHistoryTimer = null
+let pendingHistoryData = null
+const SYNC_HISTORY_DEBOUNCE_MS = 5000 // 历史同步 5 秒防抖
+
+/**
+ * 异步同步状态到云端（带防抖）
+ */
+function syncStateToCloud(stateData) {
+  if (!isCloudUser()) return
+  pendingStateData = stateData
+  if (syncStateTimer) clearTimeout(syncStateTimer)
+  syncStateTimer = setTimeout(() => {
+    if (!pendingStateData) return
+    const user = getUser()
+    cloudSyncState(user.token, pendingStateData).catch((err) => {
+      console.warn('[app-state] 状态同步云端失败', err)
+    })
+    pendingStateData = null
+  }, SYNC_DEBOUNCE_MS)
+}
+
+/**
+ * 异步同步历史到云端（带防抖）
+ */
+function syncHistoryToCloud(historyList) {
+  if (!isCloudUser()) return
+  pendingHistoryData = historyList
+  if (syncHistoryTimer) clearTimeout(syncHistoryTimer)
+  syncHistoryTimer = setTimeout(() => {
+    if (!pendingHistoryData) return
+    const user = getUser()
+    cloudSyncHistory(user.token, pendingHistoryData).catch((err) => {
+      console.warn('[app-state] 历史同步云端失败', err)
+    })
+    pendingHistoryData = null
+  }, SYNC_HISTORY_DEBOUNCE_MS)
 }
 
 export function getHistoryList() {
@@ -285,6 +386,7 @@ export function getHistoryList() {
 
 function saveHistoryList(historyList) {
   safeWrite(HISTORY_KEY, historyList)
+  syncHistoryToCloud(historyList)
 }
 
 function getFoodPool(state) {
@@ -396,7 +498,29 @@ export function drawMealResult() {
   }
 }
 
-export function submitCampusApplication(formData) {
+export async function submitCampusApplication(formData) {
+  // 云端模式：调云函数
+  if (isCloudUser()) {
+    const user = getUser()
+    const result = await cloudSubmitApplication(user.token, formData)
+    if (result.code === 0 && result.data) {
+      // 同步到本地存储
+      const applications = getStoredApplications()
+      const record = {
+        ...formData,
+        campusId: result.data.campusId || `campus-${Date.now()}`,
+        createdAt: formatTimeLabel(),
+        status: result.data.status || '待审核'
+      }
+      safeWrite(APPLICATION_KEY, [record, ...applications])
+      uni.$emit('app-state-changed')
+      return record
+    }
+    // 云端失败则降级为本地
+    console.warn('[app-state] 云端提交申请失败，降级为本地', result.msg)
+  }
+
+  // 本地模式
   const applications = getStoredApplications()
   const campusId = `campus-${Date.now()}`
   const record = {
@@ -433,11 +557,109 @@ export function clearCampusApplicationDraft() {
   safeWrite(APPLICATION_DRAFT_KEY, '')
 }
 
+// ====== 云端饭堂缓存 ======
+let cloudCanteensCache = {} // { campusName: [{ id, name, remark }] }
+
+/**
+ * 从云端获取指定学校的饭堂列表（异步）
+ * @param {string} campusName - 学校名称
+ * @returns {Promise<Array>} 饭堂列表 [{id, name, remark}]
+ */
+export async function fetchCloudCanteens(campusName) {
+  if (!campusName) return []
+
+  if (cloudCanteensCache[campusName]) {
+    return cloudCanteensCache[campusName]
+  }
+
+  try {
+    const coCampus = uniCloud.importObject('co-campus')
+    const res = await coCampus.getCanteensByCampus(campusName)
+    if (res.code === 0 && Array.isArray(res.data)) {
+      const list = res.data.map(item => ({
+        id: item.id,
+        name: item.name,
+        remark: item.remark || ''
+      }))
+      if (list.length > 0) {
+        cloudCanteensCache[campusName] = list
+      } else {
+        cloudCanteensCache[campusName] = []
+      }
+      return list
+    }
+    throw new Error('获取失败')
+  } catch (err) {
+    console.warn('[app-state] fetchCloudCanteens fallback to local', err?.message)
+    return campusCanteenMap[campusName] || []
+  }
+}
+
 export function getCanteenListByCampusName(campusName) {
+  // 优先返回云端缓存的饭堂数据
+  const cached = cloudCanteensCache[campusName]
+  if (Array.isArray(cached) && cached.length > 0) {
+    return cached
+  }
+  // fallback 到本地硬编码数据
   return campusCanteenMap[campusName] || []
 }
 
-export function getSelectedCanteenMap() {
+// ====== 云端档口缓存 ======
+let cloudStallsCache = {} // { canteenId: [{ id, name, category, remark, dishes }] }
+
+/**
+ * 从云端获取指定饭堂的档口列表（含菜品）
+ * @param {string} canteenId - 饭堂ID
+ * @returns {Promise<Array>} 档口列表 [{id, name, category, remark, dishes}]
+ */
+export async function fetchCloudStalls(canteenId, forceRefresh = false) {
+  if (!canteenId) return []
+
+  if (!forceRefresh && cloudStallsCache[canteenId]) {
+    return cloudStallsCache[canteenId]
+  }
+
+  try {
+    const coCampus = uniCloud.importObject('co-campus')
+    const res = await coCampus.getStallsByCanteen(canteenId)
+    if (res.code === 0 && Array.isArray(res.data)) {
+      if (res.data.length > 0) {
+        cloudStallsCache[canteenId] = res.data
+      } else {
+        cloudStallsCache[canteenId] = []
+      }
+      return res.data
+    }
+    throw new Error('获取失败')
+  } catch (err) {
+    console.warn('[app-state] fetchCloudStalls error', err?.message)
+    return []
+  }
+}
+
+/**
+ * 获取指定学校的完整饭堂数据（饭堂+档口+菜品）
+ * @param {string} campusName - 学校名称
+ * @returns {Promise<Array>} 饭堂列表，每项含 stalls 数组
+ */
+export async function fetchCanteenFullData(campusName) {
+  if (!campusName) return []
+
+  try {
+    const coCampus = uniCloud.importObject('co-campus')
+    const res = await coCampus.getCanteenFullData(campusName)
+    if (res.code === 0 && Array.isArray(res.data)) {
+      return res.data
+    }
+    throw new Error('获取失败')
+  } catch (err) {
+    console.warn('[app-state] fetchCanteenFullData error', err?.message)
+    return []
+  }
+}
+
+function getSelectedCanteenMap() {
   return safeRead(SELECTED_CANTEEN_KEY, {})
 }
 

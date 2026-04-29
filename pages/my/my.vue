@@ -81,9 +81,9 @@
         <view class="row-item press-feedback" hover-class="press-feedback--active" hover-start-time="20" hover-stay-time="90" @click="goJoinPage">
           <view>
             <text class="row-title">📝 校园入驻申请</text>
-            <text class="row-desc">提交学校信息后，会进入后台审核流程。</text>
+            <text class="row-desc">该功能正在开发中，敬请期待。</text>
           </view>
-          <view class="count-badge" :style="accentFillStyle">{{ applicationCount }}</view>
+          <view class="count-badge" :style="accentFillStyle">待开放</view>
         </view>
       </view>
 
@@ -96,6 +96,46 @@
         <text class="service-entry__action" :style="serviceEntryActionStyle">进入</text>
       </view>
     </template>
+
+    <!-- 开发者工具（临时，上线前删除） -->
+    <text class="section-label">开发者工具</text>
+    <view class="section-card" :style="cardStyle">
+      <view class="row-item press-feedback" hover-class="press-feedback--active" hover-start-time="20" hover-stay-time="90" @click="handleInitAdminMenus">
+        <view>
+          <text class="row-title">🔧 初始化后台菜单</text>
+          <text class="row-desc">向 opendb-admin-menus 表插入自定义菜单</text>
+        </view>
+        <text class="row-action" :style="accentTextStyle">执行</text>
+      </view>
+      <view class="row-item press-feedback" hover-class="press-feedback--active" hover-start-time="20" hover-stay-time="90" @click="handleFixAdminMenusUrl">
+        <view>
+          <text class="row-title">🔗 修复菜单 URL</text>
+          <text class="row-desc">将旧路径更新为 /pages/eat-what/xxx/list</text>
+        </view>
+        <text class="row-action" :style="accentTextStyle">修复</text>
+      </view>
+      <view class="row-item press-feedback" hover-class="press-feedback--active" hover-start-time="20" hover-stay-time="90" @click="handleRunDiagnostics">
+        <view>
+          <text class="row-title">🩺 一键诊断前后端</text>
+          <text class="row-desc">检测数据库连通性、菜单配置是否正常</text>
+        </view>
+        <text class="row-action" :style="accentTextStyle">诊断</text>
+      </view>
+      <view class="row-item press-feedback" hover-class="press-feedback--active" hover-start-time="20" hover-stay-time="90" @click="handleInitBaseData">
+        <view>
+          <text class="row-title">📦 初始化基础数据</text>
+          <text class="row-desc">将预设的校园/饭堂/服务写入数据库（供后台管理）</text>
+        </view>
+        <text class="row-action" :style="accentTextStyle">初始化</text>
+      </view>
+    </view>
+
+    <!-- 底部法律链接 -->
+    <view class="legal-footer">
+      <text class="legal-link" @click="goPrivacyPolicy">隐私政策</text>
+      <text class="legal-divider">|</text>
+      <text class="legal-link" @click="goUserAgreement">用户协议</text>
+    </view>
 
     <!-- 登录引导 sheet -->
     <view v-if="showLoginSheet" class="sheet-mask" @click="closeLoginSheet">
@@ -265,9 +305,10 @@ import {
   getTheme,
   saveAppState
 } from '@/utils/app-state.js'
-import { getUser, saveUser, clearUser } from '@/utils/user-state.js'
+import { getUser, saveUser, clearUser, handleLogin as cloudLogin, isCloudUser, syncProfileToCloud } from '@/utils/user-state.js'
+import { cloudInitAdminMenus, cloudFixAdminMenusUrl, cloudRunDiagnostics, cloudInitBaseData } from '@/utils/cloud.js'
 
-const statusBarHeight = uni.getSystemInfoSync().statusBarHeight || 20
+const statusBarHeight = uni.getWindowInfo().statusBarHeight || 20
 const menuButtonRect = typeof uni.getMenuButtonBoundingClientRect === 'function'
   ? uni.getMenuButtonBoundingClientRect()
   : null
@@ -438,7 +479,10 @@ function closeProfileSheet() {
 }
 
 function onChooseAvatar(e) {
-  loginForm.avatar = e.detail.avatarUrl || ''
+  const avatarUrl = e.detail.avatarUrl
+  if (avatarUrl) {
+    loginForm.avatar = avatarUrl
+  }
 }
 
 function onNicknameInput(e) {
@@ -455,28 +499,33 @@ async function handleLogin() {
 
   isLoggingIn.value = true
   try {
-    const mockOpenId = `local_openid_${Date.now()}`
-    const mockToken = `local_token_${Date.now()}`
-
-    saveUser({
-      openId: mockOpenId,
-      sessionKey: '',
-      token: mockToken,
+    // 优先云端登录，失败自动降级为本地登录
+    const result = await cloudLogin({
       nickname: loginForm.nickname.trim(),
       avatar: loginForm.avatar
     })
+
+    const loginMode = result.loginMode || 'local'
+    const data = result.data || {}
+
+    // 更新本地状态
     saveAppState({
       profile: {
         nickname: loginForm.nickname.trim(),
         avatar: loginForm.avatar,
-        openId: mockOpenId
+        openId: data.openid || ''
       }
     })
 
     user.value = getUser()
     state.value = getAppState()
     showLoginSheet.value = false
-    uni.showToast({ title: '登录成功', icon: 'none' })
+
+    if (loginMode === 'cloud') {
+      uni.showToast({ title: '登录成功', icon: 'none' })
+    } else {
+      uni.showToast({ title: '本地模式登录（云端不可用）', icon: 'none' })
+    }
   } catch (error) {
     console.warn('handleLogin failed', error)
     uni.showToast({ title: '登录失败，请重试', icon: 'none' })
@@ -501,10 +550,11 @@ function handleLogout() {
 }
 
 function onChooseAvatarEdit(e) {
-  const avatarUrl = e.detail.avatarUrl || ''
+  const avatarUrl = e.detail.avatarUrl
   if (avatarUrl) {
     saveUser({ avatar: avatarUrl })
     saveAppState({ profile: { avatar: avatarUrl } })
+    syncProfileToCloud({ avatar: avatarUrl })
     user.value = getUser()
     uni.showToast({ title: '头像已更新', icon: 'none' })
   }
@@ -515,6 +565,7 @@ function onNicknameEdit(e) {
   if (newNickname && newNickname !== user.value.nickname) {
     saveUser({ nickname: newNickname })
     saveAppState({ profile: { nickname: newNickname } })
+    syncProfileToCloud({ nickname: newNickname })
     user.value = getUser()
     uni.showToast({ title: '昵称已更新', icon: 'none' })
   }
@@ -566,12 +617,14 @@ function confirmZodiacSelection() {
 function handleMbtiChange(nextMbti) {
   state.value = saveAppState({ profile: { mbti: nextMbti } })
   pendingMbti.value = nextMbti
+  syncProfileToCloud({ profile: { mbti: nextMbti } })
   uni.showToast({ title: `MBTI 已切换为 ${nextMbti}`, icon: 'none' })
 }
 
 function handleZodiacChange(nextZodiac) {
   state.value = saveAppState({ profile: { zodiac: nextZodiac } })
   pendingZodiac.value = nextZodiac
+  syncProfileToCloud({ profile: { zodiac: nextZodiac } })
   uni.showToast({ title: `星座已切换为 ${nextZodiac}`, icon: 'none' })
 }
 
@@ -592,7 +645,147 @@ function goServicePage() {
 }
 
 function goJoinPage() {
-  uni.navigateTo({ url: '/pages/campus/join' })
+  uni.showToast({ title: '校园入驻功能待开放', icon: 'none' })
+}
+
+function goPrivacyPolicy() {
+  uni.navigateTo({ url: '/pages/webview/index?url=privacy' })
+}
+
+function goUserAgreement() {
+  uni.navigateTo({ url: '/pages/webview/index?url=agreement' })
+}
+
+// 开发者工具（临时，上线前删除）
+async function handleInitAdminMenus() {
+  uni.showModal({
+    title: '初始化后台菜单',
+    content: '确定要向数据库插入自定义菜单吗？（已存在的会跳过）',
+    success: async (res) => {
+      if (!res.confirm) return
+      uni.showLoading({ title: '正在初始化...' })
+      try {
+        const result = await cloudInitAdminMenus()
+        uni.hideLoading()
+        uni.showToast({ title: result.msg, icon: 'none', duration: 3000 })
+        console.log('[dev] initAdminMenus:', result)
+      } catch (err) {
+        uni.hideLoading()
+        uni.showToast({ title: '初始化失败：' + (err.message || err), icon: 'none', duration: 3000 })
+      }
+    }
+  })
+}
+
+async function handleFixAdminMenusUrl() {
+  uni.showModal({
+    title: '修复菜单 URL',
+    content: '确定要将后台菜单的旧路径更新为 /pages/eat-what/xxx/list 吗？',
+    success: async (res) => {
+      if (!res.confirm) return
+      uni.showLoading({ title: '正在修复...' })
+      try {
+        const result = await cloudFixAdminMenusUrl()
+        uni.hideLoading()
+        uni.showToast({ title: result.msg, icon: 'none', duration: 3000 })
+        console.log('[dev] fixAdminMenusUrl:', result.data?.details || result.msg)
+      } catch (err) {
+        uni.hideLoading()
+        uni.showToast({ title: '修复失败：' + (err.message || err), icon: 'none', duration: 3000 })
+      }
+    }
+  })
+}
+
+async function handleRunDiagnostics() {
+  uni.showLoading({ title: '正在诊断...' })
+  try {
+    const result = await cloudRunDiagnostics()
+    uni.hideLoading()
+
+    if (result.code !== 0) {
+      uni.showToast({ title: result.msg || '诊断失败', icon: 'none', duration: 3000 })
+      return
+    }
+
+    const d = result.data
+    const lines = []
+
+    // 数据库检测结果
+    lines.push('=== 数据库表 ===')
+    for (const [col, info] of Object.entries(d.database)) {
+      const icon = info.status === 'ok' ? '✅' : '❌'
+      const extra = info.status === 'ok' ? ` (${info.count}条)` : ` ${info.error}`
+      lines.push(`${icon} ${info.label}${extra}`)
+    }
+
+    // 菜单检测结果
+    lines.push('\n=== Admin 菜单 ===')
+    for (const [id, info] of Object.entries(d.adminMenus)) {
+      if (id === '_summary') continue
+      if (info.status === 'ok') {
+        lines.push(`✅ ${info.name}`)
+      } else if (info.status === 'missing') {
+        lines.push(`❌ ${info.name} - 记录不存在`)
+      } else if (info.status === 'url_mismatch') {
+        lines.push(`⚠️ ${info.name} - URL不对: ${info.currentUrl} → 应为 ${info.expectedUrl}`)
+      } else {
+        lines.push(`❌ ${info.name} - ${info.error}`)
+      }
+    }
+
+    const menuSummary = d.adminMenus._summary
+    lines.push(`\n菜单: ${menuSummary.ok}/${menuSummary.total} 正常, ${menuSummary.issue} 异常`)
+
+    // 弹窗显示
+    uni.showModal({
+      title: '🩺 诊断报告',
+      content: lines.join('\n'),
+      showCancel: false,
+      confirmText: '知道了'
+    })
+
+    console.log('[diagnostics] full report:', JSON.stringify(d, null, 2))
+  } catch (err) {
+    uni.hideLoading()
+    uni.showToast({ title: '诊断失败：' + (err.message || err), icon: 'none', duration: 3000 })
+  }
+}
+
+async function handleInitBaseData() {
+  uni.showModal({
+    title: '初始化基础数据',
+    content: '确定要将预设的广州商学院、7个饭堂、5个服务写入数据库吗？已存在的会跳过。',
+    success: async (res) => {
+      if (!res.confirm) return
+      uni.showLoading({ title: '正在初始化...' })
+      try {
+        const result = await cloudInitBaseData()
+        uni.hideLoading()
+        if (result.code === 0) {
+          const d = result.data
+          const msg = [
+            `校园：新增 ${d.campus.added}，跳过 ${d.campus.skipped}`,
+            `饭堂：新增 ${d.canteen.added}，跳过 ${d.canteen.skipped}`,
+            `服务：新增 ${d.service.added}，跳过 ${d.service.skipped}`,
+            '\n请刷新 admin 后台查看！'
+          ].join('\n')
+          uni.showModal({
+            title: '初始化完成',
+            content: msg,
+            showCancel: false,
+            confirmText: '好的'
+          })
+        } else {
+          uni.showToast({ title: result.msg || '初始化失败', icon: 'none', duration: 3000 })
+        }
+        console.log('[dev] initBaseData:', result)
+      } catch (err) {
+        uni.hideLoading()
+        uni.showToast({ title: '初始化失败：' + (err.message || err), icon: 'none', duration: 3000 })
+      }
+    }
+  })
 }
 </script>
 
@@ -677,4 +870,8 @@ function goJoinPage() {
 .profile-edit-pickers { display: flex; gap: 18rpx; margin-top: 28rpx; }
 .profile-edit-pickers .picker-item { flex: 1; }
 .logout-button { width: 100%; height: 88rpx; border-radius: 28rpx; margin-top: 40rpx; text-align: center; line-height: 88rpx; font-size: 30rpx; font-weight: 700; }
+
+.legal-footer { display: flex; align-items: center; justify-content: center; gap: 20rpx; margin-top: 48rpx; padding-bottom: 32rpx; }
+.legal-link { font-size: 24rpx; color: #a59487; }
+.legal-divider { font-size: 24rpx; color: #c4b8ac; }
 </style>

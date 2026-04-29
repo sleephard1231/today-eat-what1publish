@@ -28,7 +28,7 @@
     </view>
 
     <view v-else class="empty-card" :style="cardStyle">
-      <text class="empty-title">还没有新的占卜记录</text>
+      <text class="empty-title">还没有新的使用记录</text>
       <text class="empty-desc">去首页点一下“吃什么”，这里就会生成第一条结果。</text>
     </view>
   </view>
@@ -39,7 +39,7 @@ import { computed, ref } from 'vue'
 import { onLoad, onShow } from '@dcloudio/uni-app'
 import { getAppState, getHistoryList, getTheme } from '@/utils/app-state.js'
 
-const statusBarHeight = uni.getSystemInfoSync().statusBarHeight || 20
+const statusBarHeight = uni.getWindowInfo().statusBarHeight || 20
 const state = ref(getAppState())
 const historyList = ref(getHistoryList())
 

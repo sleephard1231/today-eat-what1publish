@@ -1,0 +1,206 @@
+"use strict";
+const common_vendor = require("../../common/vendor.js");
+const utils_appState = require("../../utils/app-state.js");
+const utils_cloud = require("../../utils/cloud.js");
+const _sfc_main = {
+  __name: "detail",
+  setup(__props) {
+    const statusBarHeight = common_vendor.index.getWindowInfo().statusBarHeight || 20;
+    const canteenId = common_vendor.ref("");
+    const canteenName = common_vendor.ref("");
+    const stallList = common_vendor.ref([]);
+    const showStallForm = common_vendor.ref(false);
+    const isEditingStall = common_vendor.ref(false);
+    const editingStallId = common_vendor.ref("");
+    const stallForm = common_vendor.ref({
+      name: "",
+      category: "",
+      remark: ""
+    });
+    const theme = common_vendor.computed(() => utils_appState.getTheme("campus"));
+    const pageStyle = common_vendor.computed(() => ({
+      minHeight: "100vh",
+      padding: "0 32rpx 120rpx",
+      background: `linear-gradient(180deg, ${theme.value.pageStart} 0%, ${theme.value.pageEnd} 100%)`
+    }));
+    const cardStyle = common_vendor.computed(() => ({
+      background: theme.value.card,
+      boxShadow: theme.value.shadow,
+      border: `1px solid ${theme.value.border}`
+    }));
+    const addBtnStyle = common_vendor.computed(() => ({
+      background: `linear-gradient(135deg, ${theme.value.accent} 0%, ${theme.value.accentDeep} 100%)`,
+      boxShadow: theme.value.shadow
+    }));
+    const confirmBtnStyle = common_vendor.computed(() => ({
+      background: `linear-gradient(135deg, ${theme.value.accent} 0%, ${theme.value.accentDeep} 100%)`,
+      color: "#fff"
+    }));
+    const enterBtnStyle = common_vendor.computed(() => ({
+      background: theme.value.accentSoft,
+      color: theme.value.accent,
+      border: `1px solid ${theme.value.border}`
+    }));
+    common_vendor.onLoad(async (options) => {
+      canteenId.value = (options == null ? void 0 : options.canteenId) || "";
+      canteenName.value = decodeURIComponent((options == null ? void 0 : options.canteenName) || "饭堂详情");
+      await loadStalls();
+    });
+    common_vendor.onShow(async () => {
+      if (canteenId.value) {
+        await loadStalls();
+      }
+    });
+    async function loadStalls() {
+      if (!canteenId.value)
+        return;
+      try {
+        const res = await utils_cloud.cloudGetStallsByCanteen(canteenId.value);
+        if (res.code === 0 && Array.isArray(res.data)) {
+          stallList.value = res.data;
+        }
+      } catch (err) {
+        common_vendor.index.__f__("warn", "at pages/canteen/detail.vue:149", "[detail] loadStalls error", err);
+      }
+    }
+    function goToStall(stall) {
+      common_vendor.index.navigateTo({
+        url: `/pages/canteen/stall?stallId=${stall.id}&stallName=${encodeURIComponent(stall.name)}&stallCategory=${encodeURIComponent(stall.category || "")}&stallRemark=${encodeURIComponent(stall.remark || "")}&canteenId=${canteenId.value}`
+      });
+    }
+    function showAddStall() {
+      isEditingStall.value = false;
+      editingStallId.value = "";
+      stallForm.value = { name: "", category: "", remark: "" };
+      showStallForm.value = true;
+    }
+    function showEditStall(stall) {
+      isEditingStall.value = true;
+      editingStallId.value = stall.id;
+      stallForm.value = {
+        name: stall.name || "",
+        category: stall.category || "",
+        remark: stall.remark || ""
+      };
+      showStallForm.value = true;
+    }
+    function closeStallForm() {
+      showStallForm.value = false;
+    }
+    async function submitStallForm() {
+      const form = stallForm.value;
+      if (!form.name.trim()) {
+        common_vendor.index.showToast({ title: "请输入商铺名称", icon: "none" });
+        return;
+      }
+      const stallData = {
+        name: form.name.trim(),
+        category: form.category.trim(),
+        remark: form.remark.trim()
+      };
+      common_vendor.index.showLoading({ title: isEditingStall.value ? "保存中..." : "添加中..." });
+      try {
+        let res;
+        if (isEditingStall.value) {
+          res = await utils_cloud.cloudUpdateStall(canteenId.value, editingStallId.value, stallData);
+        } else {
+          res = await utils_cloud.cloudAddStall(canteenId.value, stallData);
+        }
+        if (res.code === 0) {
+          common_vendor.index.showToast({ title: isEditingStall.value ? "保存成功" : "添加成功", icon: "success" });
+          closeStallForm();
+          await loadStalls();
+        } else {
+          common_vendor.index.showToast({ title: res.msg || "操作失败", icon: "none" });
+        }
+      } catch (err) {
+        common_vendor.index.__f__("warn", "at pages/canteen/detail.vue:212", "[detail] submitStallForm error", err);
+        common_vendor.index.showToast({ title: "操作失败", icon: "none" });
+      }
+      common_vendor.index.hideLoading();
+    }
+    function confirmDeleteStall(stall) {
+      common_vendor.index.showModal({
+        title: "确认删除",
+        content: `确定要删除商铺「${stall.name}」吗？该商铺下的所有菜品也会被删除。`,
+        confirmText: "删除",
+        confirmColor: "#e74c3c",
+        success: async ({ confirm }) => {
+          if (!confirm)
+            return;
+          common_vendor.index.showLoading({ title: "删除中..." });
+          try {
+            const res = await utils_cloud.cloudDeleteStall(canteenId.value, stall.id);
+            if (res.code === 0) {
+              common_vendor.index.showToast({ title: "已删除", icon: "success" });
+              await loadStalls();
+            } else {
+              common_vendor.index.showToast({ title: res.msg || "删除失败", icon: "none" });
+            }
+          } catch (err) {
+            common_vendor.index.showToast({ title: "删除失败", icon: "none" });
+          }
+          common_vendor.index.hideLoading();
+        }
+      });
+    }
+    function goBack() {
+      common_vendor.index.navigateBack();
+    }
+    return (_ctx, _cache) => {
+      return common_vendor.e({
+        a: common_vendor.o(goBack, "a9"),
+        b: common_vendor.t(canteenName.value),
+        c: `${common_vendor.unref(statusBarHeight) + 12}px`,
+        d: common_vendor.t(stallList.value.length),
+        e: common_vendor.s(addBtnStyle.value),
+        f: common_vendor.o(showAddStall, "03"),
+        g: stallList.value.length
+      }, stallList.value.length ? {
+        h: common_vendor.f(stallList.value, (stall, k0, i0) => {
+          return common_vendor.e({
+            a: common_vendor.t(stall.name),
+            b: stall.category
+          }, stall.category ? {
+            c: common_vendor.t(stall.category)
+          } : {}, {
+            d: stall.remark
+          }, stall.remark ? {
+            e: common_vendor.t(stall.remark)
+          } : {}, {
+            f: common_vendor.t((stall.dishes || []).length),
+            g: common_vendor.o(($event) => goToStall(stall), stall.id),
+            h: common_vendor.o(($event) => showEditStall(stall), stall.id),
+            i: common_vendor.o(($event) => confirmDeleteStall(stall), stall.id),
+            j: stall.id
+          });
+        }),
+        i: theme.value.accent,
+        j: common_vendor.s(enterBtnStyle.value),
+        k: common_vendor.s(cardStyle.value)
+      } : {
+        l: common_vendor.s(cardStyle.value)
+      }, {
+        m: showStallForm.value
+      }, showStallForm.value ? {
+        n: common_vendor.t(isEditingStall.value ? "编辑商铺" : "添加商铺"),
+        o: stallForm.value.name,
+        p: common_vendor.o(($event) => stallForm.value.name = $event.detail.value, "8f"),
+        q: stallForm.value.category,
+        r: common_vendor.o(($event) => stallForm.value.category = $event.detail.value, "40"),
+        s: stallForm.value.remark,
+        t: common_vendor.o(($event) => stallForm.value.remark = $event.detail.value, "50"),
+        v: common_vendor.o(closeStallForm, "6e"),
+        w: common_vendor.t(isEditingStall.value ? "保存" : "添加"),
+        x: common_vendor.s(confirmBtnStyle.value),
+        y: common_vendor.o(submitStallForm, "e9"),
+        z: common_vendor.s(cardStyle.value),
+        A: common_vendor.o(closeStallForm, "8c")
+      } : {}, {
+        B: common_vendor.s(pageStyle.value)
+      });
+    };
+  }
+};
+wx.createPage(_sfc_main);
+//# sourceMappingURL=../../../.sourcemap/mp-weixin/pages/canteen/detail.js.map

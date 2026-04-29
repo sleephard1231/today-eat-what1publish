@@ -1,0 +1,88 @@
+{
+  "bsonType": "object",
+  "required": ["openid", "campusName"],
+  "permission": {
+    "read": "doc.openid == auth.openid",
+    "create": true,
+    "update": false,
+    "delete": false
+  },
+  "properties": {
+    "_id": {
+      "description": "系统自动生成的记录ID"
+    },
+    "openid": {
+      "bsonType": "string",
+      "description": "申请人openid",
+      "title": "申请人"
+    },
+    "campusId": {
+      "bsonType": "string",
+      "description": "生成的校园ID",
+      "title": "校园ID"
+    },
+    "campusName": {
+      "bsonType": "string",
+      "description": "学校名称",
+      "title": "学校名称"
+    },
+    "campusTag": {
+      "bsonType": "string",
+      "description": "校区标志，如北校区/大学城校区",
+      "title": "校区标志"
+    },
+    "city": {
+      "bsonType": "string",
+      "description": "所在城市",
+      "title": "城市"
+    },
+    "contactName": {
+      "bsonType": "string",
+      "description": "联系人网名",
+      "title": "联系人"
+    },
+    "contactPhone": {
+      "bsonType": "string",
+      "description": "联系邮箱",
+      "title": "联系邮箱"
+    },
+    "status": {
+      "bsonType": "string",
+      "description": "审核状态",
+      "enum": ["待审核", "已通过", "已拒绝"],
+      "defaultValue": "待审核",
+      "title": "审核状态"
+    },
+    "reviewNote": {
+      "bsonType": "string",
+      "description": "审核备注",
+      "title": "审核备注"
+    },
+    "reviewedBy": {
+      "bsonType": "string",
+      "description": "审核人openid",
+      "title": "审核人"
+    },
+    "reviewedAt": {
+      "bsonType": "timestamp",
+      "description": "审核时间",
+      "title": "审核时间"
+    },
+    "createdAt": {
+      "bsonType": "timestamp",
+      "description": "申请时间",
+      "title": "申请时间",
+      "forceDefaultValue": {
+        "$env": "now"
+      }
+    },
+    "updatedAt": {
+      "bsonType": "timestamp",
+      "description": "更新时间",
+      "title": "更新时间",
+      "forceDefaultValue": {
+        "$env": "now"
+      }
+    }
+  }
+}

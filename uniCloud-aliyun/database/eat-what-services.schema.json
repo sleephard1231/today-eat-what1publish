@@ -1,0 +1,68 @@
+{
+  "bsonType": "object",
+  "required": ["campusName", "name"],
+  "permission": {
+    "read": true,
+    "create": false,
+    "update": false,
+    "delete": false
+  },
+  "properties": {
+    "_id": {
+      "description": "服务ID，如 gzcc-laundry"
+    },
+    "campusName": {
+      "bsonType": "string",
+      "description": "所属学校名称",
+      "title": "学校"
+    },
+    "icon": {
+      "bsonType": "string",
+      "description": "图标emoji",
+      "title": "图标"
+    },
+    "name": {
+      "bsonType": "string",
+      "description": "服务名称",
+      "title": "服务名称"
+    },
+    "remark": {
+      "bsonType": "string",
+      "description": "服务说明",
+      "title": "说明"
+    },
+    "externalUrl": {
+      "bsonType": "string",
+      "description": "外部链接",
+      "title": "外部链接"
+    },
+    "sort": {
+      "bsonType": "int",
+      "description": "排序权重",
+      "title": "排序"
+    },
+    "status": {
+      "bsonType": "string",
+      "description": "状态",
+      "enum": ["active", "inactive"],
+      "defaultValue": "active",
+      "title": "状态"
+    },
+    "createdAt": {
+      "bsonType": "timestamp",
+      "description": "创建时间",
+      "title": "创建时间",
+      "forceDefaultValue": {
+        "$env": "now"
+      }
+    },
+    "updatedAt": {
+      "bsonType": "timestamp",
+      "description": "更新时间",
+      "title": "更新时间",
+      "forceDefaultValue": {
+        "$env": "now"
+      }
+    }
+  }
+}

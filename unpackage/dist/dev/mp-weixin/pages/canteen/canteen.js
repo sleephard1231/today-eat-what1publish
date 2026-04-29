@@ -4,22 +4,33 @@ const utils_appState = require("../../utils/app-state.js");
 const _sfc_main = {
   __name: "canteen",
   setup(__props) {
-    const statusBarHeight = common_vendor.index.getSystemInfoSync().statusBarHeight || 20;
+    const statusBarHeight = common_vendor.index.getWindowInfo().statusBarHeight || 20;
     const state = common_vendor.ref(utils_appState.getAppState());
     const selectedCanteens = common_vendor.ref([]);
     const savedCanteens = common_vendor.ref([]);
+    const cloudCanteenList = common_vendor.ref([]);
     const refreshPage = () => {
       state.value = utils_appState.getAppState();
       const stored = utils_appState.getSelectedCanteen(state.value.campusId);
       savedCanteens.value = stored;
       selectedCanteens.value = [...stored];
     };
-    common_vendor.onLoad(refreshPage);
+    common_vendor.onLoad(async () => {
+      var _a;
+      refreshPage();
+      const campusName = state.value.mode === "campus" ? ((_a = utils_appState.getCampusById(state.value.campusId)) == null ? void 0 : _a.name) || "" : "";
+      if (campusName) {
+        const list = await utils_appState.fetchCloudCanteens(campusName);
+        if (list.length > 0) {
+          cloudCanteenList.value = list;
+        }
+      }
+    });
     common_vendor.onShow(refreshPage);
     const theme = common_vendor.computed(() => utils_appState.getTheme(state.value.mode));
     const currentCampus = common_vendor.computed(() => utils_appState.getCampusById(state.value.campusId));
     const currentCampusLabel = common_vendor.computed(() => currentCampus.value.campusTag || "校园版");
-    const canteenList = common_vendor.computed(() => utils_appState.getCanteenListByCampusName(currentCampus.value.name));
+    const canteenList = common_vendor.computed(() => cloudCanteenList.value.length ? cloudCanteenList.value : utils_appState.getCanteenListByCampusName(currentCampus.value.name));
     function normalizeSelection(list) {
       return [...list].map((item) => item.id).sort().join("|");
     }
@@ -137,6 +148,11 @@ ${canteenNames.join("、")}` : "确认恢复默认范围吗？\n保存后会在�
     function goBack() {
       common_vendor.index.navigateBack();
     }
+    function goToCanteenDetail(canteen) {
+      common_vendor.index.navigateTo({
+        url: `/pages/canteen/detail?canteenId=${canteen.id}&canteenName=${encodeURIComponent(canteen.name)}`
+      });
+    }
     return (_ctx, _cache) => {
       return common_vendor.e({
         a: common_vendor.o(goBack, "ca"),
@@ -162,11 +178,12 @@ ${canteenNames.join("、")}` : "确认恢复默认范围吗？\n保存后会在�
             d: common_vendor.s(canteenTitleStyle(isSelected(canteen.id))),
             e: common_vendor.t(canteen.remark),
             f: common_vendor.s(canteenSubStyle(isSelected(canteen.id))),
-            g: common_vendor.t(isSelected(canteen.id) ? "已选" : "可选"),
-            h: common_vendor.s(canteenBadgeStyle(isSelected(canteen.id))),
-            i: canteen.id,
-            j: common_vendor.s(canteenCardStyle(isSelected(canteen.id))),
-            k: common_vendor.o(($event) => handleSelectCanteen(canteen), canteen.id)
+            g: common_vendor.o(($event) => goToCanteenDetail(canteen), canteen.id),
+            h: common_vendor.t(isSelected(canteen.id) ? "已选" : "可选"),
+            i: common_vendor.s(canteenBadgeStyle(isSelected(canteen.id))),
+            j: canteen.id,
+            k: common_vendor.s(canteenCardStyle(isSelected(canteen.id))),
+            l: common_vendor.o(($event) => handleSelectCanteen(canteen), canteen.id)
           });
         })
       } : {
@@ -177,9 +194,9 @@ ${canteenNames.join("、")}` : "确认恢复默认范围吗？\n保存后会在�
         o: state.value.mode === "campus"
       }, state.value.mode === "campus" ? {
         p: common_vendor.s(ghostButtonStyle.value),
-        q: common_vendor.o(handleClearSelection, "b4"),
+        q: common_vendor.o(handleClearSelection, "1f"),
         r: common_vendor.s(saveButtonStyle.value),
-        s: common_vendor.o(handleSaveSelection, "97")
+        s: common_vendor.o(handleSaveSelection, "09")
       } : {}, {
         t: common_vendor.s(pageStyle.value)
       });

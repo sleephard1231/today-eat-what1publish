@@ -198,6 +198,21 @@ button:active,
   font-size: 22rpx;
   font-weight: 700;
 }
+.canteen-card__actions {
+  display: flex;
+  align-items: center;
+  gap: 10rpx;
+  flex-shrink: 0;
+}
+.canteen-view-btn {
+  padding: 8rpx 18rpx;
+  border-radius: 20rpx;
+  font-size: 22rpx;
+  font-weight: 700;
+  background: rgba(103, 182, 160, 0.12);
+  color: #67b6a0;
+  border: 1px solid rgba(103, 182, 160, 0.25);
+}
 .empty-card {
   margin-top: 22rpx;
   border-radius: 24rpx;

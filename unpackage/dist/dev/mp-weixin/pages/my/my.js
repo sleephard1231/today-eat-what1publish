@@ -3,10 +3,11 @@ const common_vendor = require("../../common/vendor.js");
 const common_data = require("../../common/data.js");
 const utils_appState = require("../../utils/app-state.js");
 const utils_userState = require("../../utils/user-state.js");
+const utils_cloud = require("../../utils/cloud.js");
 const _sfc_main = {
   __name: "my",
   setup(__props) {
-    const statusBarHeight = common_vendor.index.getSystemInfoSync().statusBarHeight || 20;
+    const statusBarHeight = common_vendor.index.getWindowInfo().statusBarHeight || 20;
     const menuButtonRect = typeof common_vendor.index.getMenuButtonBoundingClientRect === "function" ? common_vendor.index.getMenuButtonBoundingClientRect() : null;
     const state = common_vendor.ref(utils_appState.getAppState());
     const user = common_vendor.ref(utils_userState.getUser());
@@ -136,7 +137,10 @@ const _sfc_main = {
       showProfileSheet.value = false;
     }
     function onChooseAvatar(e) {
-      loginForm.avatar = e.detail.avatarUrl || "";
+      const avatarUrl = e.detail.avatarUrl;
+      if (avatarUrl) {
+        loginForm.avatar = avatarUrl;
+      }
     }
     function onNicknameInput(e) {
       loginForm.nickname = e.detail.value || "";
@@ -150,28 +154,29 @@ const _sfc_main = {
       }
       isLoggingIn.value = true;
       try {
-        const mockOpenId = `local_openid_${Date.now()}`;
-        const mockToken = `local_token_${Date.now()}`;
-        utils_userState.saveUser({
-          openId: mockOpenId,
-          sessionKey: "",
-          token: mockToken,
+        const result = await utils_userState.handleLogin({
           nickname: loginForm.nickname.trim(),
           avatar: loginForm.avatar
         });
+        const loginMode = result.loginMode || "local";
+        const data = result.data || {};
         utils_appState.saveAppState({
           profile: {
             nickname: loginForm.nickname.trim(),
             avatar: loginForm.avatar,
-            openId: mockOpenId
+            openId: data.openid || ""
           }
         });
         user.value = utils_userState.getUser();
         state.value = utils_appState.getAppState();
         showLoginSheet.value = false;
-        common_vendor.index.showToast({ title: "登录成功", icon: "none" });
+        if (loginMode === "cloud") {
+          common_vendor.index.showToast({ title: "登录成功", icon: "none" });
+        } else {
+          common_vendor.index.showToast({ title: "本地模式登录（云端不可用）", icon: "none" });
+        }
       } catch (error) {
-        common_vendor.index.__f__("warn", "at pages/my/my.vue:481", "handleLogin failed", error);
+        common_vendor.index.__f__("warn", "at pages/my/my.vue:530", "handleLogin failed", error);
         common_vendor.index.showToast({ title: "登录失败，请重试", icon: "none" });
       } finally {
         isLoggingIn.value = false;
@@ -192,10 +197,11 @@ const _sfc_main = {
       });
     }
     function onChooseAvatarEdit(e) {
-      const avatarUrl = e.detail.avatarUrl || "";
+      const avatarUrl = e.detail.avatarUrl;
       if (avatarUrl) {
         utils_userState.saveUser({ avatar: avatarUrl });
         utils_appState.saveAppState({ profile: { avatar: avatarUrl } });
+        utils_userState.syncProfileToCloud({ avatar: avatarUrl });
         user.value = utils_userState.getUser();
         common_vendor.index.showToast({ title: "头像已更新", icon: "none" });
       }
@@ -205,6 +211,7 @@ const _sfc_main = {
       if (newNickname && newNickname !== user.value.nickname) {
         utils_userState.saveUser({ nickname: newNickname });
         utils_appState.saveAppState({ profile: { nickname: newNickname } });
+        utils_userState.syncProfileToCloud({ nickname: newNickname });
         user.value = utils_userState.getUser();
         common_vendor.index.showToast({ title: "昵称已更新", icon: "none" });
       }
@@ -246,11 +253,13 @@ const _sfc_main = {
     function handleMbtiChange(nextMbti) {
       state.value = utils_appState.saveAppState({ profile: { mbti: nextMbti } });
       pendingMbti.value = nextMbti;
+      utils_userState.syncProfileToCloud({ profile: { mbti: nextMbti } });
       common_vendor.index.showToast({ title: `MBTI 已切换为 ${nextMbti}`, icon: "none" });
     }
     function handleZodiacChange(nextZodiac) {
       state.value = utils_appState.saveAppState({ profile: { zodiac: nextZodiac } });
       pendingZodiac.value = nextZodiac;
+      utils_userState.syncProfileToCloud({ profile: { zodiac: nextZodiac } });
       common_vendor.index.showToast({ title: `星座已切换为 ${nextZodiac}`, icon: "none" });
     }
     function goCampusPage() {
@@ -266,7 +275,136 @@ const _sfc_main = {
       common_vendor.index.navigateTo({ url: "/pages/service/service" });
     }
     function goJoinPage() {
-      common_vendor.index.navigateTo({ url: "/pages/campus/join" });
+      common_vendor.index.showToast({ title: "校园入驻功能待开放", icon: "none" });
+    }
+    function goPrivacyPolicy() {
+      common_vendor.index.navigateTo({ url: "/pages/webview/index?url=privacy" });
+    }
+    function goUserAgreement() {
+      common_vendor.index.navigateTo({ url: "/pages/webview/index?url=agreement" });
+    }
+    async function handleInitAdminMenus() {
+      common_vendor.index.showModal({
+        title: "初始化后台菜单",
+        content: "确定要向数据库插入自定义菜单吗？（已存在的会跳过）",
+        success: async (res) => {
+          if (!res.confirm)
+            return;
+          common_vendor.index.showLoading({ title: "正在初始化..." });
+          try {
+            const result = await utils_cloud.cloudInitAdminMenus();
+            common_vendor.index.hideLoading();
+            common_vendor.index.showToast({ title: result.msg, icon: "none", duration: 3e3 });
+            common_vendor.index.__f__("log", "at pages/my/my.vue:671", "[dev] initAdminMenus:", result);
+          } catch (err) {
+            common_vendor.index.hideLoading();
+            common_vendor.index.showToast({ title: "初始化失败：" + (err.message || err), icon: "none", duration: 3e3 });
+          }
+        }
+      });
+    }
+    async function handleFixAdminMenusUrl() {
+      common_vendor.index.showModal({
+        title: "修复菜单 URL",
+        content: "确定要将后台菜单的旧路径更新为 /pages/eat-what/xxx/list 吗？",
+        success: async (res) => {
+          var _a;
+          if (!res.confirm)
+            return;
+          common_vendor.index.showLoading({ title: "正在修复..." });
+          try {
+            const result = await utils_cloud.cloudFixAdminMenusUrl();
+            common_vendor.index.hideLoading();
+            common_vendor.index.showToast({ title: result.msg, icon: "none", duration: 3e3 });
+            common_vendor.index.__f__("log", "at pages/my/my.vue:691", "[dev] fixAdminMenusUrl:", ((_a = result.data) == null ? void 0 : _a.details) || result.msg);
+          } catch (err) {
+            common_vendor.index.hideLoading();
+            common_vendor.index.showToast({ title: "修复失败：" + (err.message || err), icon: "none", duration: 3e3 });
+          }
+        }
+      });
+    }
+    async function handleRunDiagnostics() {
+      common_vendor.index.showLoading({ title: "正在诊断..." });
+      try {
+        const result = await utils_cloud.cloudRunDiagnostics();
+        common_vendor.index.hideLoading();
+        if (result.code !== 0) {
+          common_vendor.index.showToast({ title: result.msg || "诊断失败", icon: "none", duration: 3e3 });
+          return;
+        }
+        const d = result.data;
+        const lines = [];
+        lines.push("=== 数据库表 ===");
+        for (const [col, info] of Object.entries(d.database)) {
+          const icon = info.status === "ok" ? "✅" : "❌";
+          const extra = info.status === "ok" ? ` (${info.count}条)` : ` ${info.error}`;
+          lines.push(`${icon} ${info.label}${extra}`);
+        }
+        lines.push("\n=== Admin 菜单 ===");
+        for (const [id, info] of Object.entries(d.adminMenus)) {
+          if (id === "_summary")
+            continue;
+          if (info.status === "ok") {
+            lines.push(`✅ ${info.name}`);
+          } else if (info.status === "missing") {
+            lines.push(`❌ ${info.name} - 记录不存在`);
+          } else if (info.status === "url_mismatch") {
+            lines.push(`⚠️ ${info.name} - URL不对: ${info.currentUrl} → 应为 ${info.expectedUrl}`);
+          } else {
+            lines.push(`❌ ${info.name} - ${info.error}`);
+          }
+        }
+        const menuSummary = d.adminMenus._summary;
+        lines.push(`
+菜单: ${menuSummary.ok}/${menuSummary.total} 正常, ${menuSummary.issue} 异常`);
+        common_vendor.index.showModal({
+          title: "🩺 诊断报告",
+          content: lines.join("\n"),
+          showCancel: false,
+          confirmText: "知道了"
+        });
+        common_vendor.index.__f__("log", "at pages/my/my.vue:748", "[diagnostics] full report:", JSON.stringify(d, null, 2));
+      } catch (err) {
+        common_vendor.index.hideLoading();
+        common_vendor.index.showToast({ title: "诊断失败：" + (err.message || err), icon: "none", duration: 3e3 });
+      }
+    }
+    async function handleInitBaseData() {
+      common_vendor.index.showModal({
+        title: "初始化基础数据",
+        content: "确定要将预设的广州商学院、7个饭堂、5个服务写入数据库吗？已存在的会跳过。",
+        success: async (res) => {
+          if (!res.confirm)
+            return;
+          common_vendor.index.showLoading({ title: "正在初始化..." });
+          try {
+            const result = await utils_cloud.cloudInitBaseData();
+            common_vendor.index.hideLoading();
+            if (result.code === 0) {
+              const d = result.data;
+              const msg = [
+                `校园：新增 ${d.campus.added}，跳过 ${d.campus.skipped}`,
+                `饭堂：新增 ${d.canteen.added}，跳过 ${d.canteen.skipped}`,
+                `服务：新增 ${d.service.added}，跳过 ${d.service.skipped}`,
+                "\n请刷新 admin 后台查看！"
+              ].join("\n");
+              common_vendor.index.showModal({
+                title: "初始化完成",
+                content: msg,
+                showCancel: false,
+                confirmText: "好的"
+              });
+            } else {
+              common_vendor.index.showToast({ title: result.msg || "初始化失败", icon: "none", duration: 3e3 });
+            }
+            common_vendor.index.__f__("log", "at pages/my/my.vue:782", "[dev] initBaseData:", result);
+          } catch (err) {
+            common_vendor.index.hideLoading();
+            common_vendor.index.showToast({ title: "初始化失败：" + (err.message || err), icon: "none", duration: 3e3 });
+          }
+        }
+      });
     }
     return (_ctx, _cache) => {
       return common_vendor.e({
@@ -314,66 +452,76 @@ const _sfc_main = {
       }, isCampusMode.value ? {
         H: common_vendor.s(accentTextStyle.value),
         I: common_vendor.o(goCanteenPage, "b8"),
-        J: common_vendor.t(applicationCount.value),
-        K: common_vendor.s(accentFillStyle.value),
-        L: common_vendor.o(goJoinPage, "79"),
-        M: common_vendor.s(cardStyle.value),
-        N: common_vendor.s(serviceEntryActionStyle.value),
-        O: common_vendor.s(serviceEntryStyle.value),
-        P: common_vendor.o(goServicePage, "35")
+        J: common_vendor.s(accentFillStyle.value),
+        K: common_vendor.o(goJoinPage, "79"),
+        L: common_vendor.s(cardStyle.value),
+        M: common_vendor.s(serviceEntryActionStyle.value),
+        N: common_vendor.s(serviceEntryStyle.value),
+        O: common_vendor.o(goServicePage, "bf")
       } : {}, {
-        Q: showLoginSheet.value
+        P: common_vendor.s(accentTextStyle.value),
+        Q: common_vendor.o(handleInitAdminMenus, "97"),
+        R: common_vendor.s(accentTextStyle.value),
+        S: common_vendor.o(handleFixAdminMenusUrl, "cc"),
+        T: common_vendor.s(accentTextStyle.value),
+        U: common_vendor.o(handleRunDiagnostics, "0c"),
+        V: common_vendor.s(accentTextStyle.value),
+        W: common_vendor.o(handleInitBaseData, "31"),
+        X: common_vendor.s(cardStyle.value),
+        Y: common_vendor.o(goPrivacyPolicy, "3b"),
+        Z: common_vendor.o(goUserAgreement, "16"),
+        aa: showLoginSheet.value
       }, showLoginSheet.value ? common_vendor.e({
-        R: loginForm.avatar
+        ab: loginForm.avatar
       }, loginForm.avatar ? {
-        S: loginForm.avatar
+        ac: loginForm.avatar
       } : {
-        T: common_vendor.s(accentFillStyle.value)
+        ad: common_vendor.s(accentFillStyle.value)
       }, {
-        U: common_vendor.s(avatarShellStyle.value),
-        V: common_vendor.o(onChooseAvatar, "39"),
-        W: loginForm.nickname,
-        X: common_vendor.o(onNicknameInput, "2c"),
-        Y: common_vendor.t(isLoggingIn.value ? "登录中..." : "登录"),
-        Z: common_vendor.s(accentFillStyle.value),
-        aa: isLoggingIn.value,
-        ab: common_vendor.o(handleLogin, "db"),
-        ac: common_vendor.s(sheetStyle.value),
-        ad: common_vendor.o(() => {
-        }, "a3"),
-        ae: common_vendor.o(closeLoginSheet, "18")
+        ae: common_vendor.s(avatarShellStyle.value),
+        af: common_vendor.o(onChooseAvatar, "a2"),
+        ag: loginForm.nickname,
+        ah: common_vendor.o(onNicknameInput, "bd"),
+        ai: common_vendor.t(isLoggingIn.value ? "登录中..." : "登录"),
+        aj: common_vendor.s(accentFillStyle.value),
+        ak: isLoggingIn.value,
+        al: common_vendor.o(handleLogin, "ee"),
+        am: common_vendor.s(sheetStyle.value),
+        an: common_vendor.o(() => {
+        }, "7d"),
+        ao: common_vendor.o(closeLoginSheet, "99")
       }) : {}, {
-        af: showProfileSheet.value
+        ap: showProfileSheet.value
       }, showProfileSheet.value ? common_vendor.e({
-        ag: user.value.avatar
+        aq: user.value.avatar
       }, user.value.avatar ? {
-        ah: user.value.avatar
+        ar: user.value.avatar
       } : {
-        ai: common_vendor.s(accentFillStyle.value)
+        as: common_vendor.s(accentFillStyle.value)
       }, {
-        aj: common_vendor.o(onChooseAvatarEdit, "6e"),
-        ak: user.value.nickname,
-        al: common_vendor.o(onNicknameEdit, "fa"),
-        am: common_vendor.t(currentMbtiCard.value.emoji),
-        an: common_vendor.t(currentMbtiCard.value.value),
-        ao: common_vendor.t(currentMbtiCard.value.funAlias),
-        ap: common_vendor.s(pickerChipStyle.value),
-        aq: common_vendor.o(openMbtiPopupFromSheet, "8b"),
-        ar: common_vendor.t(currentZodiacCard.value.emoji),
-        as: common_vendor.t(currentZodiacCard.value.value),
-        at: common_vendor.t(currentZodiacCard.value.funAlias),
-        av: common_vendor.s(pickerChipStyle.value),
-        aw: common_vendor.o(openZodiacPopupFromSheet, "59"),
-        ax: common_vendor.s(ghostButtonStyle.value),
-        ay: common_vendor.o(handleLogout, "04"),
-        az: common_vendor.s(sheetStyle.value),
-        aA: common_vendor.o(() => {
-        }, "6a"),
-        aB: common_vendor.o(closeProfileSheet, "f5")
+        at: common_vendor.o(onChooseAvatarEdit, "85"),
+        av: user.value.nickname,
+        aw: common_vendor.o(onNicknameEdit, "20"),
+        ax: common_vendor.t(currentMbtiCard.value.emoji),
+        ay: common_vendor.t(currentMbtiCard.value.value),
+        az: common_vendor.t(currentMbtiCard.value.funAlias),
+        aA: common_vendor.s(pickerChipStyle.value),
+        aB: common_vendor.o(openMbtiPopupFromSheet, "51"),
+        aC: common_vendor.t(currentZodiacCard.value.emoji),
+        aD: common_vendor.t(currentZodiacCard.value.value),
+        aE: common_vendor.t(currentZodiacCard.value.funAlias),
+        aF: common_vendor.s(pickerChipStyle.value),
+        aG: common_vendor.o(openZodiacPopupFromSheet, "3a"),
+        aH: common_vendor.s(ghostButtonStyle.value),
+        aI: common_vendor.o(handleLogout, "c4"),
+        aJ: common_vendor.s(sheetStyle.value),
+        aK: common_vendor.o(() => {
+        }, "63"),
+        aL: common_vendor.o(closeProfileSheet, "3c")
       }) : {}, {
-        aC: showMbtiPopup.value
+        aM: showMbtiPopup.value
       }, showMbtiPopup.value ? {
-        aD: common_vendor.f(common_vendor.unref(common_data.mbtiCardOptions), (item, index, i0) => {
+        aN: common_vendor.f(common_vendor.unref(common_data.mbtiCardOptions), (item, index, i0) => {
           return {
             a: common_vendor.t(item.emoji),
             b: common_vendor.t(item.value),
@@ -388,17 +536,17 @@ const _sfc_main = {
             k: common_vendor.o(($event) => pendingMbti.value = item.value, item.value)
           };
         }),
-        aE: common_vendor.o(cancelMbtiSelection, "60"),
-        aF: common_vendor.s(accentFillStyle.value),
-        aG: common_vendor.o(confirmMbtiSelection, "1b"),
-        aH: common_vendor.s(sheetStyle.value),
-        aI: common_vendor.o(() => {
-        }, "a2"),
-        aJ: common_vendor.o(cancelMbtiSelection, "a5")
+        aO: common_vendor.o(cancelMbtiSelection, "3c"),
+        aP: common_vendor.s(accentFillStyle.value),
+        aQ: common_vendor.o(confirmMbtiSelection, "5a"),
+        aR: common_vendor.s(sheetStyle.value),
+        aS: common_vendor.o(() => {
+        }, "cf"),
+        aT: common_vendor.o(cancelMbtiSelection, "af")
       } : {}, {
-        aK: showZodiacPopup.value
+        aU: showZodiacPopup.value
       }, showZodiacPopup.value ? {
-        aL: common_vendor.f(common_vendor.unref(common_data.zodiacCardOptions), (item, index, i0) => {
+        aV: common_vendor.f(common_vendor.unref(common_data.zodiacCardOptions), (item, index, i0) => {
           return {
             a: common_vendor.t(item.emoji),
             b: common_vendor.t(item.value),
@@ -413,15 +561,15 @@ const _sfc_main = {
             k: common_vendor.o(($event) => pendingZodiac.value = item.value, item.value)
           };
         }),
-        aM: common_vendor.o(cancelZodiacSelection, "c5"),
-        aN: common_vendor.s(accentFillStyle.value),
-        aO: common_vendor.o(confirmZodiacSelection, "d5"),
-        aP: common_vendor.s(sheetStyle.value),
-        aQ: common_vendor.o(() => {
-        }, "6a"),
-        aR: common_vendor.o(cancelZodiacSelection, "91")
+        aW: common_vendor.o(cancelZodiacSelection, "43"),
+        aX: common_vendor.s(accentFillStyle.value),
+        aY: common_vendor.o(confirmZodiacSelection, "5c"),
+        aZ: common_vendor.s(sheetStyle.value),
+        ba: common_vendor.o(() => {
+        }, "3e"),
+        bb: common_vendor.o(cancelZodiacSelection, "5a")
       } : {}, {
-        aS: common_vendor.s(pageStyle.value)
+        bc: common_vendor.s(pageStyle.value)
       });
     };
   }

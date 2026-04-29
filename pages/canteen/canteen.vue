@@ -30,7 +30,10 @@
               <text class="canteen-name" :style="canteenTitleStyle(isSelected(canteen.id))">{{ canteen.name }}</text>
               <text class="canteen-remark" :style="canteenSubStyle(isSelected(canteen.id))">{{ canteen.remark }}</text>
             </view>
-            <view class="canteen-badge" :style="canteenBadgeStyle(isSelected(canteen.id))">{{ isSelected(canteen.id) ? '已选' : '可选' }}</view>
+            <view class="canteen-card__actions">
+              <view class="canteen-view-btn" @click.stop="goToCanteenDetail(canteen)">看菜</view>
+              <view class="canteen-badge" :style="canteenBadgeStyle(isSelected(canteen.id))">{{ isSelected(canteen.id) ? '已选' : '可选' }}</view>
+            </view>
           </view>
         </view>
       </view>
@@ -52,12 +55,13 @@
 <script setup>
 import { computed, ref } from 'vue'
 import { onLoad, onShow } from '@dcloudio/uni-app'
-import { clearSelectedCanteen, getAppState, getCampusById, getCanteenListByCampusName, getSelectedCanteen, getTheme, saveSelectedCanteen } from '@/utils/app-state.js'
+import { clearSelectedCanteen, getAppState, getCampusById, getCanteenListByCampusName, getSelectedCanteen, getTheme, saveSelectedCanteen, fetchCloudCanteens } from '@/utils/app-state.js'
 
-const statusBarHeight = uni.getSystemInfoSync().statusBarHeight || 20
+const statusBarHeight = uni.getWindowInfo().statusBarHeight || 20
 const state = ref(getAppState())
 const selectedCanteens = ref([])
 const savedCanteens = ref([])
+const cloudCanteenList = ref([]) // 云端饭堂数据
 
 const refreshPage = () => {
   state.value = getAppState()
@@ -66,13 +70,24 @@ const refreshPage = () => {
   selectedCanteens.value = [...stored]
 }
 
-onLoad(refreshPage)
+onLoad(async () => {
+  refreshPage()
+  // 从云端获取饭堂列表
+  const campusName = state.value.mode === 'campus' ? (getCampusById(state.value.campusId)?.name || '') : ''
+  if (campusName) {
+    const list = await fetchCloudCanteens(campusName)
+    if (list.length > 0) {
+      cloudCanteenList.value = list
+    }
+  }
+})
 onShow(refreshPage)
 
 const theme = computed(() => getTheme(state.value.mode))
 const currentCampus = computed(() => getCampusById(state.value.campusId))
 const currentCampusLabel = computed(() => currentCampus.value.campusTag || '校园版')
-const canteenList = computed(() => getCanteenListByCampusName(currentCampus.value.name))
+// 优先使用云端数据，fallback 到本地
+const canteenList = computed(() => cloudCanteenList.value.length ? cloudCanteenList.value : getCanteenListByCampusName(currentCampus.value.name))
 
 function normalizeSelection(list) {
   return [...list].map((item) => item.id).sort().join('|')
@@ -220,6 +235,12 @@ function handleSaveSelection() {
 function goBack() {
   uni.navigateBack()
 }
+
+function goToCanteenDetail(canteen) {
+  uni.navigateTo({
+    url: `/pages/canteen/detail?canteenId=${canteen.id}&canteenName=${encodeURIComponent(canteen.name)}`
+  })
+}
 </script>
 
 <style lang="scss">
@@ -244,6 +265,8 @@ function goBack() {
 .canteen-name, .empty-title { display: block; font-size: 32rpx; font-weight: 700; }
 .canteen-remark { display: block; margin-top: 12rpx; font-size: 24rpx; line-height: 1.5; }
 .canteen-badge { display: inline-flex; align-items: center; justify-content: center; min-width: 86rpx; padding: 10rpx 18rpx; border-radius: 22rpx; font-size: 22rpx; font-weight: 700; }
+.canteen-card__actions { display: flex; align-items: center; gap: 10rpx; flex-shrink: 0; }
+.canteen-view-btn { padding: 8rpx 18rpx; border-radius: 20rpx; font-size: 22rpx; font-weight: 700; background: rgba(103,182,160,0.12); color: #67b6a0; border: 1px solid rgba(103,182,160,0.25); }
 .empty-card { margin-top: 22rpx; border-radius: 24rpx; padding: 48rpx 28rpx; text-align: center; }
 .empty-icon { display: block; font-size: 72rpx; margin-bottom: 20rpx; opacity: 0.7; }
 .action-row { display: flex; gap: 18rpx; margin-top: 32rpx; }

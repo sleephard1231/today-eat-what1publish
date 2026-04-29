@@ -58,6 +58,20 @@
   - 饭堂选择持久化
   - tabBar 主题切换逻辑
 
+### 用户状态层
+
+- `utils/user-state.js`
+- 这里放：
+  - 用户登录态管理
+  - 本地用户信息存储（openId、token、头像、昵称）
+  - 用户状态变更通知（`uni.$emit('user-state-changed')`）
+
+### 第三方插件
+
+- `uni_modules/pyh-nv/` — 自定义导航栏组件，所有页面均使用 `navigationStyle: "custom"` + 此组件
+- `uni_modules/uni-icons/` — 官方图标库
+- `uni_modules/uni-scss/` — 官方 SCSS 变量库
+
 ### 构建产物
 
 - `unpackage/`
@@ -110,6 +124,7 @@
   - `pages/my/my.vue`
 - 共享工具文件：
   - `utils/app-state.js`
+  - `utils/user-state.js`
 - 共享配置文件：
   - `common/data.js`
 - 可复用组件文件：
@@ -203,23 +218,68 @@
 2. 在 `pages/<feature>/` 下创建页面目录
 3. 页面内部用 `ref` / `computed` 管理本地状态
 4. 共享业务逻辑优先从 `utils/app-state.js` 调
-5. 共享静态数据优先从 `common/data.js` 调
-6. 所有主题相关样式优先接入 `themeMap`
-7. 页面要有空状态设计，尤其是依赖模式或依赖数据时
-8. 文案要像产品文案，不要像临时占位
+5. 用户身份相关逻辑优先从 `utils/user-state.js` 调
+6. 共享静态数据优先从 `common/data.js` 调
+7. 所有主题相关样式优先接入 `themeMap`
+8. 页面要有空状态设计，尤其是依赖模式或依赖数据时
+9. 文案要像产品文案，不要像临时占位
 
 ## 后端接入规范
 
 当前状态：
 
-- `api/` 目录已经预留
-- 但还没有正式启用请求层
+- 已接入 uniCloud（阿里云服务空间）
+- 云对象：`co-user`（微信登录/用户资料/状态同步）、`co-campus`（校园入驻申请/审核）、`co-content`（内容安全检查）
+- 前端适配层：`utils/cloud.js`
+- 数据库集合：`eat-what-users`、`eat-what-state`、`eat-what-history`、`eat-what-applications`
+- 数据库 schema：`uniCloud-aliyun/database/*.schema.json`
 
-后续如果接后端：
+### 云端架构
 
-- 所有请求统一放进 `api/*`
-- 页面里不要直接散写请求逻辑
-- 返回数据先做统一整理，再给页面使用
+```
+前端页面
+  ↓ 调用
+utils/cloud.js（云端适配层，封装云对象调用 + 降级策略）
+  ↓ 调用
+uniCloud 云对象
+  ├── co-user      → 微信登录(openId) / 用户资料 / 状态同步 / 历史同步
+  ├── co-campus    → 校园入驻申请 / 审核 / 已入驻校园列表
+  ├── co-content   → 文本内容安全检查(微信 msgSecCheck)
+  └── co-ai        → AI 推荐理由生成（通义千问 DashScope API）
+  ↓ 读写 / 调外部 API
+uniCloud 数据库          外部 AI 服务
+  ├── eat-what-users         ─┐
+  ├── eat-what-state          │  通义千问 (qwen-turbo)
+  ├── eat-what-history       ←┘  DashScope API
+  └── eat-what-applications
+```
+
+**AI 推荐理由流程：**
+1. 用户点「吃什么」→ 立即显示模板理由（<100ms，无感）
+2. 后台异步调 `co-ai.generateReason()` → 通义千问生成个性化文案（~1-2s）
+3. AI 返回后平滑替换理由文本
+4. AI 失败则保持模板理由不变（用户无感知降级）
+
+### 降级策略
+
+- 云端登录失败 → 自动降级为本地模拟登录（`local_openid_xxx`）
+- 云端同步失败 → 仅本地存储，不阻塞用户操作
+- 内容安全检查失败 → 暂时放行，不阻塞提交
+- 用户可通过 `isCloudUser()` 判断是否为云端登录用户
+
+### 上线前必须修改
+
+1. **WX_APPSECRET**：在 `co-user/index.obj.js` 和 `co-content/index.obj.js` 中填入真实的 AppSecret
+2. **DASHSCOPE_API_KEY**：在 `co-ai/index.obj.js` 中填入通义千问 API Key（阿里云 DashScope 控制台获取）
+3. **ADMIN_OPENIDS**：在 `co-campus/index.obj.js` 中填入管理员 openid
+4. **开通内容安全能力**：微信公众平台 → 开发管理 → 接口设置 → 内容安全
+5. **上传云函数**：在 HBuilderX 中右键 `uniCloud-aliyun/cloudfunctions/` → 上传所有云函数
+6. **创建数据库集合**：在 uniCloud 控制台创建 4 个集合，或上传 schema 自动创建
+
+### 开发规范
+
+- 所有云对象调用统一通过 `utils/cloud.js`，页面里不要直接 `uniCloud.importObject`
+- 云函数错误优先 `console.warn`，不要直接弹窗阻塞用户
 - 保持当前页面结构稳定，不要让页面因为接后端而变得很重
 
 ## 错误处理规范
@@ -258,10 +318,12 @@
 
 这些不是立刻阻塞，但要长期记着：
 
-1. `api/` 已预留，但还没正式接入
-2. `components/CustomTabBar.vue` 存在，但当前实际仍用 `pages.json` 原生 tabBar
-3. 部分文件还存在中文编码混乱
-4. 文本清理和编码统一应当作为后续长期整理重点
+1. `components/CustomTabBar.vue` 存在但未被任何页面引用，当前实际仍用 `pages.json` 原生 tabBar
+2. `uni_modules/pyh-nv/` 组件内部使用了 `uni.getSystemInfoSync()`（已弃用），但这是第三方组件暂不修改
+3. 头像上传目前用 `uni.chooseImage` 的临时路径，云端用户头像需要对接云存储（uniCloud.uploadFile）实现永久存储
+4. 云函数中的 `ADMIN_OPENIDS` 为空数组，审核功能需要填入管理员 openid 才能使用
+5. AI 推荐理由目前是"先显示模板、后台替换"模式；后续可考虑加 loading 态或骨架屏让用户感知到正在 AI 生成
+6. 通义千问 API 有免费额度（qwen-turbo 约 100万 token/月），超量后需付费
 
 ## 默认决策顺序
 
@@ -269,7 +331,7 @@
 
 1. 改动更小
 2. 更贴合当前项目结构
-3. 更符合本地优先的数据模式
+3. 云端优先 + 本地降级的数据模式
 4. 更能复用现有主题 token
 5. 更符合当前奶油风界面
 

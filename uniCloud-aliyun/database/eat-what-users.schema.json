@@ -1,0 +1,83 @@
+{
+  "bsonType": "object",
+  "required": ["openid"],
+  "permission": {
+    "read": "doc.openid == auth.openid",
+    "create": true,
+    "update": "doc.openid == auth.openid",
+    "delete": false
+  },
+  "properties": {
+    "_id": {
+      "description": "系统自动生成的记录ID"
+    },
+    "openid": {
+      "bsonType": "string",
+      "description": "微信openid，用户唯一标识",
+      "title": "openid"
+    },
+    "unionid": {
+      "bsonType": "string",
+      "description": "微信unionid",
+      "title": "unionid"
+    },
+    "sessionKey": {
+      "bsonType": "string",
+      "description": "微信会话密钥",
+      "title": "sessionKey"
+    },
+    "token": {
+      "bsonType": "string",
+      "description": "自定义登录态token",
+      "title": "token"
+    },
+    "nickname": {
+      "bsonType": "string",
+      "description": "用户昵称",
+      "title": "昵称"
+    },
+    "avatar": {
+      "bsonType": "string",
+      "description": "头像URL",
+      "title": "头像"
+    },
+    "profile": {
+      "bsonType": "object",
+      "description": "用户个性化资料",
+      "properties": {
+        "mbti": {
+          "bsonType": "string",
+          "description": "MBTI类型",
+          "title": "MBTI"
+        },
+        "zodiac": {
+          "bsonType": "string",
+          "description": "星座",
+          "title": "星座"
+        }
+      }
+    },
+    "loginMode": {
+      "bsonType": "string",
+      "description": "登录模式：cloud云端 / local本地",
+      "enum": ["cloud", "local"],
+      "title": "登录模式"
+    },
+    "createdAt": {
+      "bsonType": "timestamp",
+      "description": "创建时间",
+      "title": "创建时间",
+      "forceDefaultValue": {
+        "$env": "now"
+      }
+    },
+    "updatedAt": {
+      "bsonType": "timestamp",
+      "description": "更新时间",
+      "title": "更新时间",
+      "forceDefaultValue": {
+        "$env": "now"
+      }
+    }
+  }
+}

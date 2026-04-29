@@ -1,0 +1,102 @@
+{
+  "bsonType": "object",
+  "required": ["openid"],
+  "permission": {
+    "read": "doc.openid == auth.openid",
+    "create": true,
+    "update": "doc.openid == auth.openid",
+    "delete": false
+  },
+  "properties": {
+    "_id": {
+      "description": "系统自动生成的记录ID"
+    },
+    "openid": {
+      "bsonType": "string",
+      "description": "用户openid",
+      "title": "openid"
+    },
+    "mode": {
+      "bsonType": "string",
+      "description": "当前模式：normal普通版 / campus校园版",
+      "enum": ["normal", "campus"],
+      "title": "当前模式"
+    },
+    "campusId": {
+      "bsonType": "string",
+      "description": "当前选择的校园ID",
+      "title": "校园ID"
+    },
+    "profile": {
+      "bsonType": "object",
+      "description": "用户个性化配置",
+      "properties": {
+        "nickname": {
+          "bsonType": "string",
+          "title": "昵称"
+        },
+        "mbti": {
+          "bsonType": "string",
+          "title": "MBTI"
+        },
+        "zodiac": {
+          "bsonType": "string",
+          "title": "星座"
+        },
+        "avatar": {
+          "bsonType": "string",
+          "title": "头像"
+        },
+        "openId": {
+          "bsonType": "string",
+          "title": "openId"
+        }
+      }
+    },
+    "daily": {
+      "bsonType": "object",
+      "description": "每日使用状态",
+      "properties": {
+        "dateKey": {
+          "bsonType": "string",
+          "description": "日期标识，如 2026-04-29",
+          "title": "日期"
+        },
+        "remaining": {
+          "bsonType": "int",
+          "description": "当日剩余推荐次数",
+          "title": "剩余次数"
+        },
+        "lastResult": {
+          "bsonType": "object",
+          "description": "最近一次推荐结果",
+          "title": "最近结果"
+        }
+      }
+    },
+    "stats": {
+      "bsonType": "object",
+      "description": "统计信息",
+      "properties": {
+        "servedCount": {
+          "bsonType": "int",
+          "description": "累计推荐次数",
+          "title": "推荐次数"
+        }
+      }
+    },
+    "selectedCanteen": {
+      "bsonType": "object",
+      "description": "已选饭堂映射 { campusId: [{id, name}] }",
+      "title": "已选饭堂"
+    },
+    "updatedAt": {
+      "bsonType": "timestamp",
+      "description": "更新时间",
+      "title": "更新时间",
+      "forceDefaultValue": {
+        "$env": "now"
+      }
+    }
+  }
+}

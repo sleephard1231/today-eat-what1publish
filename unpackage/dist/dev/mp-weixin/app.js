@@ -9,7 +9,10 @@ if (!Math) {
   "./pages/campus/join.js";
   "./pages/history/index.js";
   "./pages/canteen/canteen.js";
+  "./pages/canteen/detail.js";
+  "./pages/canteen/stall.js";
   "./pages/service/service.js";
+  "./pages/webview/index.js";
 }
 const _sfc_main = {
   onLaunch() {

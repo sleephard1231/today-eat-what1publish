@@ -38,7 +38,7 @@ import { onLoad, onShow } from '@dcloudio/uni-app'
 import { campusServiceMap } from '@/common/data.js'
 import { getAppState, getCampusById, getTheme } from '@/utils/app-state.js'
 
-const statusBarHeight = uni.getSystemInfoSync().statusBarHeight || 20
+const statusBarHeight = uni.getWindowInfo().statusBarHeight || 20
 const state = ref(getAppState())
 
 const refreshPage = () => {

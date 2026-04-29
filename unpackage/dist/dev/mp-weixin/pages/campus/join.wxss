@@ -147,3 +147,137 @@ button:active,
   font-size: 34rpx;
   font-weight: 700;
 }
+.privacy-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 16rpx;
+  margin-top: 28rpx;
+  padding: 0 4rpx;
+}
+.privacy-check {
+  flex-shrink: 0;
+  width: 36rpx;
+  height: 36rpx;
+  border-radius: 8rpx;
+  border: 2rpx solid #c4b8ac;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 2rpx;
+  transition: all 0.2s;
+}
+.privacy-check--active {
+  border-color: transparent;
+}
+.privacy-check-icon {
+  font-size: 22rpx;
+  color: #ffffff;
+  font-weight: 700;
+}
+.privacy-text {
+  font-size: 22rpx;
+  color: #998d83;
+  line-height: 1.7;
+}
+.privacy-link {
+  color: #ff7a2f;
+  font-weight: 600;
+}
+.field-input--picker {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.field-input--placeholder {
+  color: #b7ada4 !important;
+}
+.field-arrow {
+  font-size: 32rpx;
+  color: #b7ada4;
+}
+.city-picker-mask {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.45);
+  z-index: 999;
+  display: flex;
+  align-items: flex-end;
+}
+.city-picker {
+  width: 100%;
+  max-height: 80vh;
+  border-radius: 32rpx 32rpx 0 0;
+  padding: 30rpx;
+  display: flex;
+  flex-direction: column;
+}
+.city-picker-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 20rpx;
+}
+.city-picker-title {
+  font-size: 34rpx;
+  font-weight: 700;
+  color: #2f251d;
+}
+.city-picker-close {
+  font-size: 36rpx;
+  color: #999;
+  padding: 10rpx;
+}
+.city-list {
+  max-height: 55vh;
+}
+.city-group + .city-group {
+  margin-top: 24rpx;
+}
+.city-group-label {
+  display: block;
+  font-size: 24rpx;
+  color: #999;
+  margin-bottom: 12rpx;
+  padding-left: 8rpx;
+}
+.city-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16rpx;
+}
+.city-item {
+  padding: 14rpx 28rpx;
+  border-radius: 20rpx;
+  background: rgba(255, 255, 255, 0.74);
+  color: #3f3126;
+  font-size: 26rpx;
+}
+.city-item--active {
+  color: #ffffff !important;
+}
+.city-search-row {
+  display: flex;
+  gap: 16rpx;
+}
+.city-search-row--top {
+  margin-bottom: 16rpx;
+}
+.city-search-input {
+  flex: 1;
+  height: 72rpx;
+  padding: 0 20rpx;
+  border-radius: 18rpx;
+  background: rgba(255, 255, 255, 0.74);
+  font-size: 26rpx;
+}
+.city-confirm-btn {
+  height: 72rpx;
+  padding: 0 28rpx;
+  border-radius: 18rpx;
+  font-size: 26rpx;
+  font-weight: 700;
+  color: #fff;
+}

@@ -1,0 +1,1 @@
+<view class="page"><view class="top-bar" style="{{'padding-top:' + c}}"><text class="back-text" bindtap="{{a}}">‹ 返回</text><text class="top-title">{{b}}</text><text class="top-placeholder"></text></view><view class="content-wrap"><rich-text nodes="{{d}}"/></view></view>

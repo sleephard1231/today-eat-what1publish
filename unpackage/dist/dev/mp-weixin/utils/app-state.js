@@ -1,6 +1,8 @@
 "use strict";
 const common_vendor = require("../common/vendor.js");
 const common_data = require("../common/data.js");
+const utils_cloud = require("./cloud.js");
+const utils_userState = require("./user-state.js");
 const STATE_KEY = "eat-what-state";
 const HISTORY_KEY = "eat-what-history";
 const APPLICATION_KEY = "eat-what-campus-applications";
@@ -70,7 +72,7 @@ function safeWrite(key, value) {
   try {
     common_vendor.index.setStorageSync(key, value);
   } catch (error) {
-    common_vendor.index.__f__("warn", "at utils/app-state.js:87", "storage write failed", error);
+    common_vendor.index.__f__("warn", "at utils/app-state.js:98", "storage write failed", error);
   }
 }
 function getTodayKey() {
@@ -194,7 +196,7 @@ function applyTabBarTheme(mode) {
       }
     });
   } catch (error) {
-    common_vendor.index.__f__("warn", "at utils/app-state.js:238", "setTabBarStyle skipped", error);
+    common_vendor.index.__f__("warn", "at utils/app-state.js:292", "setTabBarStyle skipped", error);
   }
 }
 function ensureAppState() {
@@ -229,13 +231,53 @@ function saveAppState(patch = {}) {
   });
   safeWrite(STATE_KEY, nextState);
   common_vendor.index.$emit("app-state-changed");
+  syncStateToCloud(nextState);
   return nextState;
+}
+let syncStateTimer = null;
+let pendingStateData = null;
+const SYNC_DEBOUNCE_MS = 3e3;
+let syncHistoryTimer = null;
+let pendingHistoryData = null;
+const SYNC_HISTORY_DEBOUNCE_MS = 5e3;
+function syncStateToCloud(stateData) {
+  if (!utils_userState.isCloudUser())
+    return;
+  pendingStateData = stateData;
+  if (syncStateTimer)
+    clearTimeout(syncStateTimer);
+  syncStateTimer = setTimeout(() => {
+    if (!pendingStateData)
+      return;
+    const user = utils_userState.getUser();
+    utils_cloud.cloudSyncState(user.token, pendingStateData).catch((err) => {
+      common_vendor.index.__f__("warn", "at utils/app-state.js:360", "[app-state] 状态同步云端失败", err);
+    });
+    pendingStateData = null;
+  }, SYNC_DEBOUNCE_MS);
+}
+function syncHistoryToCloud(historyList) {
+  if (!utils_userState.isCloudUser())
+    return;
+  pendingHistoryData = historyList;
+  if (syncHistoryTimer)
+    clearTimeout(syncHistoryTimer);
+  syncHistoryTimer = setTimeout(() => {
+    if (!pendingHistoryData)
+      return;
+    const user = utils_userState.getUser();
+    utils_cloud.cloudSyncHistory(user.token, pendingHistoryData).catch((err) => {
+      common_vendor.index.__f__("warn", "at utils/app-state.js:377", "[app-state] 历史同步云端失败", err);
+    });
+    pendingHistoryData = null;
+  }, SYNC_HISTORY_DEBOUNCE_MS);
 }
 function getHistoryList() {
   return safeRead(HISTORY_KEY, defaultHistory);
 }
 function saveHistoryList(historyList) {
   safeWrite(HISTORY_KEY, historyList);
+  syncHistoryToCloud(historyList);
 }
 function getFoodPool(state) {
   const currentCampus = getCampusById(state.campusId);
@@ -331,7 +373,24 @@ function drawMealResult() {
     result
   };
 }
-function submitCampusApplication(formData) {
+async function submitCampusApplication(formData) {
+  if (utils_userState.isCloudUser()) {
+    const user = utils_userState.getUser();
+    const result = await utils_cloud.cloudSubmitApplication(user.token, formData);
+    if (result.code === 0 && result.data) {
+      const applications2 = getStoredApplications();
+      const record2 = {
+        ...formData,
+        campusId: result.data.campusId || `campus-${Date.now()}`,
+        createdAt: formatTimeLabel(),
+        status: result.data.status || "待审核"
+      };
+      safeWrite(APPLICATION_KEY, [record2, ...applications2]);
+      common_vendor.index.$emit("app-state-changed");
+      return record2;
+    }
+    common_vendor.index.__f__("warn", "at utils/app-state.js:520", "[app-state] 云端提交申请失败，降级为本地", result.msg);
+  }
   const applications = getStoredApplications();
   const campusId = `campus-${Date.now()}`;
   const record = {
@@ -361,7 +420,40 @@ function saveCampusApplicationDraft(formData) {
 function clearCampusApplicationDraft() {
   safeWrite(APPLICATION_DRAFT_KEY, "");
 }
+let cloudCanteensCache = {};
+async function fetchCloudCanteens(campusName) {
+  if (!campusName)
+    return [];
+  if (cloudCanteensCache[campusName]) {
+    return cloudCanteensCache[campusName];
+  }
+  try {
+    const coCampus = common_vendor._r.importObject("co-campus");
+    const res = await coCampus.getCanteensByCampus(campusName);
+    if (res.code === 0 && Array.isArray(res.data)) {
+      const list = res.data.map((item) => ({
+        id: item.id,
+        name: item.name,
+        remark: item.remark || ""
+      }));
+      if (list.length > 0) {
+        cloudCanteensCache[campusName] = list;
+      } else {
+        cloudCanteensCache[campusName] = [];
+      }
+      return list;
+    }
+    throw new Error("获取失败");
+  } catch (err) {
+    common_vendor.index.__f__("warn", "at utils/app-state.js:593", "[app-state] fetchCloudCanteens fallback to local", err == null ? void 0 : err.message);
+    return common_data.campusCanteenMap[campusName] || [];
+  }
+}
 function getCanteenListByCampusName(campusName) {
+  const cached = cloudCanteensCache[campusName];
+  if (Array.isArray(cached) && cached.length > 0) {
+    return cached;
+  }
   return common_data.campusCanteenMap[campusName] || [];
 }
 function getSelectedCanteenMap() {
@@ -398,6 +490,7 @@ exports.clearCampusApplicationDraft = clearCampusApplicationDraft;
 exports.clearSelectedCanteen = clearSelectedCanteen;
 exports.drawMealResult = drawMealResult;
 exports.ensureAppState = ensureAppState;
+exports.fetchCloudCanteens = fetchCloudCanteens;
 exports.getAppState = getAppState;
 exports.getCampusApplicationDraft = getCampusApplicationDraft;
 exports.getCampusApplications = getCampusApplications;

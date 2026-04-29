@@ -1,0 +1,78 @@
+{
+  "bsonType": "object",
+  "required": ["stallId", "name"],
+  "permission": {
+    "read": true,
+    "create": false,
+    "update": false,
+    "delete": false
+  },
+  "properties": {
+    "_id": {
+      "description": "菜品ID"
+    },
+    "stallId": {
+      "bsonType": "string",
+      "description": "所属档口ID",
+      "title": "档口ID"
+    },
+    "canteenId": {
+      "bsonType": "string",
+      "description": "所属饭堂ID（冗余，方便查询）",
+      "title": "饭堂ID"
+    },
+    "name": {
+      "bsonType": "string",
+      "description": "菜品名称",
+      "title": "菜品名称"
+    },
+    "category": {
+      "bsonType": "string",
+      "description": "菜品分类",
+      "title": "分类"
+    },
+    "tag": {
+      "bsonType": "string",
+      "description": "标签：人气/新品/推荐",
+      "title": "标签"
+    },
+    "price": {
+      "bsonType": "string",
+      "description": "价格文本，如 12",
+      "title": "价格"
+    },
+    "vibe": {
+      "bsonType": "string",
+      "description": "氛围标签，如 酸甜开胃/香浓满足",
+      "title": "氛围"
+    },
+    "sort": {
+      "bsonType": "int",
+      "description": "排序权重",
+      "title": "排序"
+    },
+    "status": {
+      "bsonType": "string",
+      "description": "状态",
+      "enum": ["active", "inactive"],
+      "defaultValue": "active",
+      "title": "状态"
+    },
+    "createdAt": {
+      "bsonType": "timestamp",
+      "description": "创建时间",
+      "title": "创建时间",
+      "forceDefaultValue": {
+        "$env": "now"
+      }
+    },
+    "updatedAt": {
+      "bsonType": "timestamp",
+      "description": "更新时间",
+      "title": "更新时间",
+      "forceDefaultValue": {
+        "$env": "now"
+      }
+    }
+  }
+}

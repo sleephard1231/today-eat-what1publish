@@ -1,11 +1,13 @@
 /**
  * 用户状态管理
  * 负责登录态、本地用户信息存储
- *
- * 注意：wx.getUserProfile 已废弃，头像通过 <button open-type="chooseAvatar"> 获取，
- * 昵称通过 <input type="nickname"> 获取，均在页面组件中完成。
+ * 
+ * 支持两种模式：
+ * 1. 云端模式：通过 uniCloud 云函数获取真实 openId，数据可跨设备同步
+ * 2. 本地模式：云函数不可用时降级为本地模拟登录（开发/测试用）
  */
-import { loginWithWechat } from '@/api/user.js'
+
+import { cloudWxLogin, cloudGetProfile, cloudUpdateProfile, isCloudAvailable } from '@/utils/cloud.js'
 
 const USER_KEY = 'eat-what-user'
 
@@ -15,7 +17,8 @@ const defaultUser = {
   token: '',
   nickname: '',
   avatar: '',
-  isLoggedIn: false
+  isLoggedIn: false,
+  loginMode: 'local' // 'cloud' | 'local'
 }
 
 function safeRead(key, fallbackValue) {
@@ -49,20 +52,100 @@ export function clearUser() {
   uni.$emit('user-state-changed')
 }
 
-export function isLoggedIn() {
-  return getUser().isLoggedIn
+/**
+ * 云端微信登录
+ * @param {object} userInfo - { nickname, avatar }
+ * @returns {{ code: number, data?: object, msg?: string }}
+ */
+export async function wxCloudLogin(userInfo = {}) {
+  // 尝试云端登录
+  const result = await cloudWxLogin(userInfo)
+
+  if (result.code === 0 && result.data) {
+    // 云端登录成功
+    saveUser({
+      openId: result.data.openid,
+      sessionKey: '',
+      token: result.data.token,
+      nickname: result.data.nickname || userInfo.nickname || '',
+      avatar: result.data.avatar || userInfo.avatar || '',
+      loginMode: 'cloud'
+    })
+    return { code: 0, data: result.data, loginMode: 'cloud' }
+  }
+
+  // 云端登录失败，降级为本地模拟登录
+  console.warn('[user-state] 云端登录失败，降级为本地登录:', result.msg)
+  return { code: result.code, msg: result.msg, loginMode: 'local' }
 }
 
 /**
- * 获取微信登录凭证 code，用于后端换取 openId / sessionKey
- * 头像和昵称不再通过此方法获取，需在页面中用 chooseAvatar + nickname input
+ * 本地模拟登录（降级方案/开发用）
+ * @param {object} userInfo - { nickname, avatar }
  */
-export async function getWxLoginCode() {
-  try {
-    const loginRes = await uni.login({ provider: 'weixin' })
-    return loginRes.code || null
-  } catch (error) {
-    console.warn('wx.login failed', error)
-    return null
+export function localLogin(userInfo = {}) {
+  const mockOpenId = `local_openid_${Date.now()}`
+  const mockToken = `local_token_${Date.now()}`
+
+  saveUser({
+    openId: mockOpenId,
+    sessionKey: '',
+    token: mockToken,
+    nickname: userInfo.nickname || '',
+    avatar: userInfo.avatar || '',
+    loginMode: 'local'
+  })
+
+  return {
+    code: 0,
+    data: {
+      openid: mockOpenId,
+      token: mockToken,
+      nickname: userInfo.nickname || '',
+      avatar: userInfo.avatar || '',
+      isNewUser: true
+    },
+    loginMode: 'local'
   }
+}
+
+/**
+ * 统一登录入口
+ * 优先尝试云端登录，失败则降级为本地登录
+ * @param {object} userInfo - { nickname, avatar }
+ * @returns {{ code: number, data?: object, msg?: string, loginMode: string }}
+ */
+export async function handleLogin(userInfo = {}) {
+  const cloudResult = await wxCloudLogin(userInfo)
+
+  if (cloudResult.code === 0) {
+    return cloudResult
+  }
+
+  // 降级为本地登录
+  const localResult = localLogin(userInfo)
+  return { ...localResult, fallbackMsg: cloudResult.msg }
+}
+
+/**
+ * 同步更新用户资料到云端（如果已云端登录）
+ * @param {object} profileData - { nickname?, avatar?, profile: { mbti?, zodiac? } }
+ */
+export async function syncProfileToCloud(profileData = {}) {
+  const user = getUser()
+  if (user.loginMode !== 'cloud' || !user.token) return
+
+  try {
+    await cloudUpdateProfile(user.token, profileData)
+  } catch (err) {
+    console.warn('[user-state] 同步资料到云端失败', err)
+  }
+}
+
+/**
+ * 检查是否为云端登录用户
+ */
+export function isCloudUser() {
+  const user = getUser()
+  return user.loginMode === 'cloud' && !!user.token
 }

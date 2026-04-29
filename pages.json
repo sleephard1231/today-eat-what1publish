@@ -37,7 +37,25 @@
       }
     },
     {
+      "path": "pages/canteen/detail",
+      "style": {
+        "navigationStyle": "custom"
+      }
+    },
+    {
+      "path": "pages/canteen/stall",
+      "style": {
+        "navigationStyle": "custom"
+      }
+    },
+    {
       "path": "pages/service/service",
+      "style": {
+        "navigationStyle": "custom"
+      }
+    },
+    {
+      "path": "pages/webview/index",
       "style": {
         "navigationStyle": "custom"
       }

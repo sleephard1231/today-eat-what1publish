@@ -1,0 +1,83 @@
+{
+  "bsonType": "object",
+  "required": ["openid"],
+  "permission": {
+    "read": "doc.openid == auth.openid",
+    "create": true,
+    "update": "doc.openid == auth.openid",
+    "delete": false
+  },
+  "properties": {
+    "_id": {
+      "description": "系统自动生成的记录ID"
+    },
+    "openid": {
+      "bsonType": "string",
+      "description": "用户openid",
+      "title": "openid"
+    },
+    "records": {
+      "bsonType": "array",
+      "description": "推荐历史记录列表（最多30条）",
+      "title": "历史记录",
+      "items": {
+        "bsonType": "object",
+        "properties": {
+          "id": {
+            "bsonType": "string",
+            "description": "记录ID",
+            "title": "ID"
+          },
+          "mealName": {
+            "bsonType": "string",
+            "description": "推荐的菜名",
+            "title": "菜名"
+          },
+          "vibe": {
+            "bsonType": "string",
+            "description": "氛围/感觉",
+            "title": "氛围"
+          },
+          "canteen": {
+            "bsonType": "string",
+            "description": "饭堂名称",
+            "title": "饭堂"
+          },
+          "campusName": {
+            "bsonType": "string",
+            "description": "学校名称或'普通版推荐'",
+            "title": "学校"
+          },
+          "mode": {
+            "bsonType": "string",
+            "description": "模式：normal / campus",
+            "title": "模式"
+          },
+          "reason": {
+            "bsonType": "string",
+            "description": "推荐理由",
+            "title": "推荐理由"
+          },
+          "isAI": {
+            "bsonType": "bool",
+            "description": "理由是否由AI生成",
+            "title": "AI生成"
+          },
+          "createdAt": {
+            "bsonType": "string",
+            "description": "创建时间文本，如 04-29 12:18",
+            "title": "创建时间"
+          }
+        }
+      }
+    },
+    "updatedAt": {
+      "bsonType": "timestamp",
+      "description": "更新时间",
+      "title": "更新时间",
+      "forceDefaultValue": {
+        "$env": "now"
+      }
+    }
+  }
+}

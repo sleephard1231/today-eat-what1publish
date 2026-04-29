@@ -5,7 +5,7 @@ const utils_appState = require("../../utils/app-state.js");
 const _sfc_main = {
   __name: "select",
   setup(__props) {
-    const statusBarHeight = common_vendor.index.getSystemInfoSync().statusBarHeight || 20;
+    const statusBarHeight = common_vendor.index.getWindowInfo().statusBarHeight || 20;
     const presetCampusIds = common_data.presetCampuses.map((item) => item.id);
     const appState = common_vendor.ref(utils_appState.getAppState());
     const selectedMode = common_vendor.ref(appState.value.mode);
@@ -179,9 +179,7 @@ const _sfc_main = {
       }, 400);
     }
     function goJoinPage() {
-      common_vendor.index.navigateTo({
-        url: "/pages/campus/join"
-      });
+      common_vendor.index.showToast({ title: "🚧 校园入驻功能待开放", icon: "none" });
     }
     function goBack() {
       common_vendor.index.navigateBack();

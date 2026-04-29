@@ -464,30 +464,6 @@ button:active,
     transform: translateY(0) scale(1);
 }
 }
-@keyframes titleBreath {
-0%, 100% {
-    opacity: 0.92;
-    transform: scale(1);
-}
-50% {
-    opacity: 1;
-    transform: scale(1.03);
-}
-}
-@keyframes confettiWiggle {
-0%, 100% {
-    transform: rotate(0deg) scale(1);
-}
-25% {
-    transform: rotate(-10deg) scale(1.06);
-}
-50% {
-    transform: rotate(8deg) scale(1.12);
-}
-75% {
-    transform: rotate(-6deg) scale(1.04);
-}
-}
 @keyframes iconBounce {
 0%, 55%, 100% {
     transform: translateY(0);
@@ -497,14 +473,6 @@ button:active,
 }
 36% {
     transform: translateY(2rpx) scale(0.98);
-}
-}
-@keyframes progressGlow {
-0%, 100% {
-    filter: saturate(1) brightness(1);
-}
-50% {
-    filter: saturate(1.12) brightness(1.05);
 }
 }
 @keyframes orbitSpin {

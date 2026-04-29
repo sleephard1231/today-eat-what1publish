@@ -5,7 +5,7 @@ const utils_appState = require("../../utils/app-state.js");
 const _sfc_main = {
   __name: "index",
   setup(__props) {
-    const statusBarHeight = common_vendor.index.getSystemInfoSync().statusBarHeight || 20;
+    const statusBarHeight = common_vendor.index.getWindowInfo().statusBarHeight || 20;
     const state = common_vendor.ref(utils_appState.getAppState());
     const isDrawing = common_vendor.ref(false);
     const showResultPopup = common_vendor.ref(false);
@@ -144,7 +144,7 @@ const _sfc_main = {
       utils_appState.applyTabBarTheme(drawResult.state.mode);
       animateFortuneProgress();
       if (drawResult.exhausted) {
-        common_vendor.index.showToast({ title: "今天的占卜次数用完了", icon: "none" });
+        common_vendor.index.showToast({ title: "今天的使用次数用完了", icon: "none" });
         return;
       }
       popupResult.value = drawResult.result;

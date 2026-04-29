@@ -106,7 +106,7 @@
 
     <view class="join-card" :style="subtleCardStyle" @click="goJoinPage">
       <text class="join-title">校园入驻功能</text>
-      <text class="join-desc">如果你的学校还没在列表里，可以马上提交入驻申请。</text>
+      <text class="join-desc">🚧 该功能正在开发中，敬请期待</text>
     </view>
   </view>
 </template>
@@ -124,7 +124,7 @@ import {
   saveAppState
 } from '@/utils/app-state.js'
 
-const statusBarHeight = uni.getSystemInfoSync().statusBarHeight || 20
+const statusBarHeight = uni.getWindowInfo().statusBarHeight || 20
 const presetCampusIds = presetCampuses.map((item) => item.id)
 const appState = ref(getAppState())
 const selectedMode = ref(appState.value.mode)
@@ -345,9 +345,7 @@ function saveSelection() {
 }
 
 function goJoinPage() {
-  uni.navigateTo({
-    url: '/pages/campus/join'
-  })
+  uni.showToast({ title: '🚧 校园入驻功能待开放', icon: 'none' })
 }
 
 function goBack() {

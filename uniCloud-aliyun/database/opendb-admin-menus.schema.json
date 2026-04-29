@@ -1,0 +1,71 @@
+{
+  "bsonType": "object",
+  "required": ["menu_id", "name"],
+  "permission": {
+    "read": true,
+    "create": "CREATE_OPENDB_ADMIN_MENUS",
+    "update": "UPDATE_OPENDB_ADMIN_MENUS",
+    "delete": "DELETE_OPENDB_ADMIN_MENUS"
+  },
+  "properties": {
+    "_id": {
+      "description": "存储文档 ID"
+    },
+    "menu_id": {
+      "bsonType": "string",
+      "description": "菜单项的ID",
+      "title": "菜单ID",
+      "trim": "both"
+    },
+    "name": {
+      "bsonType": "string",
+      "description": "菜单名称",
+      "title": "菜单名称",
+      "trim": "both"
+    },
+    "icon": {
+      "bsonType": "string",
+      "description": "菜单图标",
+      "title": "图标",
+      "trim": "both"
+    },
+    "url": {
+      "bsonType": "string",
+      "description": "菜单URL",
+      "title": "菜单URL",
+      "trim": "both"
+    },
+    "sort": {
+      "bsonType": "int",
+      "description": "菜单序号",
+      "title": "序号"
+    },
+    "parent_id": {
+      "bsonType": "string",
+      "description": "父级菜单ID，关联菜单表的menu_id字段",
+      "title": "父级菜单ID",
+      "trim": "both"
+    },
+    "permission": {
+      "bsonType": "array",
+      "description": "菜单权限列表",
+      "title": "权限列表",
+      "items": {
+        "bsonType": "string"
+      }
+    },
+    "enable": {
+      "bsonType": "bool",
+      "description": "是否启用",
+      "title": "是否启用"
+    },
+    "create_date": {
+      "bsonType": "timestamp",
+      "description": "创建时间",
+      "title": "创建时间",
+      "forceDefaultValue": {
+        "$env": "now"
+      }
+    }
+  }
+}

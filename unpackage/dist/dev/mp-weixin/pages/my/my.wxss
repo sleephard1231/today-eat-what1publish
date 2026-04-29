@@ -551,3 +551,19 @@ to {
   font-size: 30rpx;
   font-weight: 700;
 }
+.legal-footer {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 20rpx;
+  margin-top: 48rpx;
+  padding-bottom: 32rpx;
+}
+.legal-link {
+  font-size: 24rpx;
+  color: #a59487;
+}
+.legal-divider {
+  font-size: 24rpx;
+  color: #c4b8ac;
+}
