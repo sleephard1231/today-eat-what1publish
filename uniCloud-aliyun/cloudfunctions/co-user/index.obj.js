@@ -8,8 +8,8 @@
  */
 
 // ⚠️ 上线前必须填入真实的 AppSecret
-const WX_APPID = 'wx你的appid'
-const WX_APPSECRET = '你的appsecret'
+const WX_APPID = 'wx3212c0e346843235'
+const WX_APPSECRET = '9a2f13b99c9f0c1c9b106e5552d74b3e'
 
 // token 有效期 7 天
 const TOKEN_EXPIRE_MS = 7 * 24 * 60 * 60 * 1000

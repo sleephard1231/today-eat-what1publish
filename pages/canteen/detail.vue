@@ -9,7 +9,7 @@
     <!-- 操作栏 -->
     <view class="action-bar">
       <text class="stall-count-label">商铺列表 ({{ stallList.length }})</text>
-      <view class="add-stall-btn" :style="addBtnStyle" @click="showAddStall">
+      <view v-if="canManage" class="add-stall-btn" :style="addBtnStyle" @click="showAddStall">
         <text class="add-stall-btn-text">+ 添加商铺</text>
       </view>
     </view>
@@ -32,7 +32,7 @@
         </view>
 
         <!-- 快捷操作 -->
-        <view class="stall-actions">
+        <view v-if="canManage" class="stall-actions">
           <view class="stall-action-btn stall-edit-btn" @click.stop="showEditStall(stall)">编辑</view>
           <view class="stall-action-btn stall-delete-btn" @click.stop="confirmDeleteStall(stall)">删除</view>
         </view>
@@ -78,12 +78,13 @@
 import { computed, ref } from 'vue'
 import { onLoad, onShow } from '@dcloudio/uni-app'
 import { getTheme } from '@/utils/app-state.js'
-import { cloudGetStallsByCanteen, cloudAddStall, cloudUpdateStall, cloudDeleteStall } from '@/utils/cloud.js'
+import { cloudGetStallsByCanteen, cloudAddStall, cloudUpdateStall, cloudDeleteStall, cloudIsCampusAdmin } from '@/utils/cloud.js'
 
 const statusBarHeight = uni.getWindowInfo().statusBarHeight || 20
 const canteenId = ref('')
 const canteenName = ref('')
 const stallList = ref([])
+const canManage = ref(false)
 
 const showStallForm = ref(false)
 const isEditingStall = ref(false)
@@ -128,6 +129,7 @@ onLoad(async (options) => {
   canteenId.value = options?.canteenId || ''
   canteenName.value = decodeURIComponent(options?.canteenName || '饭堂详情')
 
+  await refreshManagePermission()
   await loadStalls()
 })
 
@@ -150,6 +152,11 @@ async function loadStalls() {
   }
 }
 
+async function refreshManagePermission() {
+  const res = await cloudIsCampusAdmin()
+  canManage.value = res.code === 0 && !!res.data?.isAdmin
+}
+
 function goToStall(stall) {
   uni.navigateTo({
     url: `/pages/canteen/stall?stallId=${stall.id}&stallName=${encodeURIComponent(stall.name)}&stallCategory=${encodeURIComponent(stall.category || '')}&stallRemark=${encodeURIComponent(stall.remark || '')}&canteenId=${canteenId.value}`
@@ -157,6 +164,11 @@ function goToStall(stall) {
 }
 
 function showAddStall() {
+  if (!canManage.value) {
+    uni.showToast({ title: '无管理权限', icon: 'none' })
+    return
+  }
+
   isEditingStall.value = false
   editingStallId.value = ''
   stallForm.value = { name: '', category: '', remark: '' }
@@ -164,6 +176,11 @@ function showAddStall() {
 }
 
 function showEditStall(stall) {
+  if (!canManage.value) {
+    uni.showToast({ title: '无管理权限', icon: 'none' })
+    return
+  }
+
   isEditingStall.value = true
   editingStallId.value = stall.id
   stallForm.value = {
@@ -179,6 +196,11 @@ function closeStallForm() {
 }
 
 async function submitStallForm() {
+  if (!canManage.value) {
+    uni.showToast({ title: '无管理权限', icon: 'none' })
+    return
+  }
+
   const form = stallForm.value
   if (!form.name.trim()) {
     uni.showToast({ title: '请输入商铺名称', icon: 'none' })
@@ -217,6 +239,11 @@ async function submitStallForm() {
 }
 
 function confirmDeleteStall(stall) {
+  if (!canManage.value) {
+    uni.showToast({ title: '无管理权限', icon: 'none' })
+    return
+  }
+
   uni.showModal({
     title: '确认删除',
     content: `确定要删除商铺「${stall.name}」吗？该商铺下的所有菜品也会被删除。`,

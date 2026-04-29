@@ -26,6 +26,15 @@ let coCampus = null
 let coContent = null
 let coAi = null
 
+function getStoredUserToken() {
+  try {
+    const user = uni.getStorageSync('eat-what-user') || {}
+    return user.loginMode === 'cloud' ? (user.token || '') : ''
+  } catch {
+    return ''
+  }
+}
+
 function getCoUser() {
   if (!coUser) {
     coUser = uniCloud.importObject('co-user')
@@ -256,8 +265,10 @@ export async function cloudGetStallsByCanteen(canteenId) {
  */
 export async function cloudAddStall(canteenId, stallData = {}) {
   try {
+    const token = getStoredUserToken()
+    if (!token) return { code: -1, msg: '请先使用管理员账号登录' }
     const co = getCoCampus()
-    return await co.addStall(canteenId, stallData)
+    return await co.addStall(token, canteenId, stallData)
   } catch (err) {
     console.warn('[cloud] cloudAddStall error', err)
     return { code: -1, msg: '添加商铺失败' }
@@ -272,8 +283,10 @@ export async function cloudAddStall(canteenId, stallData = {}) {
  */
 export async function cloudUpdateStall(canteenId, stallId, stallData = {}) {
   try {
+    const token = getStoredUserToken()
+    if (!token) return { code: -1, msg: '请先使用管理员账号登录' }
     const co = getCoCampus()
-    return await co.updateStall(canteenId, stallId, stallData)
+    return await co.updateStall(token, canteenId, stallId, stallData)
   } catch (err) {
     console.warn('[cloud] cloudUpdateStall error', err)
     return { code: -1, msg: '更新商铺失败' }
@@ -287,8 +300,10 @@ export async function cloudUpdateStall(canteenId, stallId, stallData = {}) {
  */
 export async function cloudDeleteStall(canteenId, stallId) {
   try {
+    const token = getStoredUserToken()
+    if (!token) return { code: -1, msg: '请先使用管理员账号登录' }
     const co = getCoCampus()
-    return await co.deleteStall(canteenId, stallId)
+    return await co.deleteStall(token, canteenId, stallId)
   } catch (err) {
     console.warn('[cloud] cloudDeleteStall error', err)
     return { code: -1, msg: '删除商铺失败' }
@@ -319,8 +334,10 @@ export async function cloudGetDishesByStall(stallId) {
  */
 export async function cloudAddDish(stallId, canteenId, dishData = {}) {
   try {
+    const token = getStoredUserToken()
+    if (!token) return { code: -1, msg: '请先使用管理员账号登录' }
     const co = getCoCampus()
-    return await co.addDish(stallId, canteenId, dishData)
+    return await co.addDish(token, stallId, canteenId, dishData)
   } catch (err) {
     console.warn('[cloud] cloudAddDish error', err)
     return { code: -1, msg: '添加菜品失败' }
@@ -335,8 +352,10 @@ export async function cloudAddDish(stallId, canteenId, dishData = {}) {
  */
 export async function cloudUpdateDish(stallId, dishId, dishData = {}) {
   try {
+    const token = getStoredUserToken()
+    if (!token) return { code: -1, msg: '请先使用管理员账号登录' }
     const co = getCoCampus()
-    return await co.updateDish(stallId, dishId, dishData)
+    return await co.updateDish(token, stallId, dishId, dishData)
   } catch (err) {
     console.warn('[cloud] cloudUpdateDish error', err)
     return { code: -1, msg: '更新菜品失败' }
@@ -350,8 +369,10 @@ export async function cloudUpdateDish(stallId, dishId, dishData = {}) {
  */
 export async function cloudDeleteDish(stallId, dishId) {
   try {
+    const token = getStoredUserToken()
+    if (!token) return { code: -1, msg: '请先使用管理员账号登录' }
     const co = getCoCampus()
-    return await co.deleteDish(stallId, dishId)
+    return await co.deleteDish(token, stallId, dishId)
   } catch (err) {
     console.warn('[cloud] cloudDeleteDish error', err)
     return { code: -1, msg: '删除菜品失败' }
@@ -365,6 +386,18 @@ export async function cloudDeleteDish(stallId, dishId) {
  * @param {object} context - 推荐上下文，见 co-ai.generateReason 参数说明
  * @returns {{ code: number, reason?: string, msg?: string }}
  */
+export async function cloudIsCampusAdmin() {
+  try {
+    const token = getStoredUserToken()
+    if (!token) return { code: 0, data: { isAdmin: false } }
+    const co = getCoCampus()
+    return await co.isAdmin(token)
+  } catch (err) {
+    console.warn('[cloud] cloudIsCampusAdmin error', err)
+    return { code: -1, data: { isAdmin: false }, msg: '管理员身份校验失败' }
+  }
+}
+
 export async function aiGenerateReason(context = {}) {
   try {
     const co = getCoAi()

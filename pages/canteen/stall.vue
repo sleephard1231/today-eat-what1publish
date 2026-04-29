@@ -18,7 +18,7 @@
     <!-- 操作栏 -->
     <view class="action-bar">
       <text class="dish-count-label">菜品列表 ({{ dishList.length }})</text>
-      <view class="add-dish-btn" :style="addBtnStyle" @click="showAddDish">
+      <view v-if="canManage" class="add-dish-btn" :style="addBtnStyle" @click="showAddDish">
         <text class="add-dish-btn-text">+ 添加菜品</text>
       </view>
     </view>
@@ -37,7 +37,7 @@
             <text v-if="dish.vibe" class="dish-vibe">{{ dish.vibe }}</text>
           </view>
         </view>
-        <view class="dish-actions">
+        <view v-if="canManage" class="dish-actions">
           <view class="dish-action-btn dish-edit-btn" @click="showEditDish(dish)">编辑</view>
           <view class="dish-action-btn dish-delete-btn" @click="confirmDeleteDish(dish)">删除</view>
         </view>
@@ -97,7 +97,7 @@
 import { computed, ref } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
 import { getTheme } from '@/utils/app-state.js'
-import { cloudGetDishesByStall, cloudAddDish, cloudUpdateDish, cloudDeleteDish } from '@/utils/cloud.js'
+import { cloudGetDishesByStall, cloudAddDish, cloudUpdateDish, cloudDeleteDish, cloudIsCampusAdmin } from '@/utils/cloud.js'
 
 const statusBarHeight = uni.getWindowInfo().statusBarHeight || 20
 const stallId = ref('')
@@ -107,6 +107,7 @@ const stallRemark = ref('')
 const canteenId = ref('')
 const dishList = ref([])
 const loading = ref(false)
+const canManage = ref(false)
 
 const showDishForm = ref(false)
 const isEditing = ref(false)
@@ -168,6 +169,7 @@ onLoad(async (options) => {
   stallRemark.value = decodeURIComponent(options?.stallRemark || '')
   canteenId.value = options?.canteenId || ''
 
+  await refreshManagePermission()
   await loadDishes()
 })
 
@@ -185,7 +187,17 @@ async function loadDishes() {
   loading.value = false
 }
 
+async function refreshManagePermission() {
+  const res = await cloudIsCampusAdmin()
+  canManage.value = res.code === 0 && !!res.data?.isAdmin
+}
+
 function showAddDish() {
+  if (!canManage.value) {
+    uni.showToast({ title: '无管理权限', icon: 'none' })
+    return
+  }
+
   isEditing.value = false
   editingDishId.value = ''
   dishForm.value = { name: '', category: '', tag: '', price: '', vibe: '' }
@@ -193,6 +205,11 @@ function showAddDish() {
 }
 
 function showEditDish(dish) {
+  if (!canManage.value) {
+    uni.showToast({ title: '无管理权限', icon: 'none' })
+    return
+  }
+
   isEditing.value = true
   editingDishId.value = dish.id
   dishForm.value = {
@@ -210,6 +227,11 @@ function closeDishForm() {
 }
 
 async function submitDishForm() {
+  if (!canManage.value) {
+    uni.showToast({ title: '无管理权限', icon: 'none' })
+    return
+  }
+
   const form = dishForm.value
   if (!form.name.trim()) {
     uni.showToast({ title: '请输入菜品名称', icon: 'none' })
@@ -250,6 +272,11 @@ async function submitDishForm() {
 }
 
 function confirmDeleteDish(dish) {
+  if (!canManage.value) {
+    uni.showToast({ title: '无管理权限', icon: 'none' })
+    return
+  }
+
   uni.showModal({
     title: '确认删除',
     content: `确定要删除「${dish.name}」吗？`,

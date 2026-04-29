@@ -42,7 +42,7 @@
       "bsonType": "timestamp",
       "description": "创建时间",
       "title": "创建时间",
-      "forceDefaultValue": {
+      "defaultValue": {
         "$env": "now"
       }
     },
@@ -50,7 +50,7 @@
       "bsonType": "timestamp",
       "description": "更新时间",
       "title": "更新时间",
-      "forceDefaultValue": {
+      "defaultValue": {
         "$env": "now"
       }
     }

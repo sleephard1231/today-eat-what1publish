@@ -13,6 +13,7 @@ const _sfc_main = {
     const canteenId = common_vendor.ref("");
     const dishList = common_vendor.ref([]);
     const loading = common_vendor.ref(false);
+    const canManage = common_vendor.ref(false);
     const showDishForm = common_vendor.ref(false);
     const isEditing = common_vendor.ref(false);
     const editingDishId = common_vendor.ref("");
@@ -62,6 +63,7 @@ const _sfc_main = {
       stallCategory.value = decodeURIComponent((options == null ? void 0 : options.stallCategory) || "");
       stallRemark.value = decodeURIComponent((options == null ? void 0 : options.stallRemark) || "");
       canteenId.value = (options == null ? void 0 : options.canteenId) || "";
+      await refreshManagePermission();
       await loadDishes();
     });
     async function loadDishes() {
@@ -74,17 +76,30 @@ const _sfc_main = {
           dishList.value = res.data;
         }
       } catch (err) {
-        common_vendor.index.__f__("warn", "at pages/canteen/stall.vue:183", "[stall] loadDishes error", err);
+        common_vendor.index.__f__("warn", "at pages/canteen/stall.vue:185", "[stall] loadDishes error", err);
       }
       loading.value = false;
     }
+    async function refreshManagePermission() {
+      var _a;
+      const res = await utils_cloud.cloudIsCampusAdmin();
+      canManage.value = res.code === 0 && !!((_a = res.data) == null ? void 0 : _a.isAdmin);
+    }
     function showAddDish() {
+      if (!canManage.value) {
+        common_vendor.index.showToast({ title: "无管理权限", icon: "none" });
+        return;
+      }
       isEditing.value = false;
       editingDishId.value = "";
       dishForm.value = { name: "", category: "", tag: "", price: "", vibe: "" };
       showDishForm.value = true;
     }
     function showEditDish(dish) {
+      if (!canManage.value) {
+        common_vendor.index.showToast({ title: "无管理权限", icon: "none" });
+        return;
+      }
       isEditing.value = true;
       editingDishId.value = dish.id;
       dishForm.value = {
@@ -100,6 +115,10 @@ const _sfc_main = {
       showDishForm.value = false;
     }
     async function submitDishForm() {
+      if (!canManage.value) {
+        common_vendor.index.showToast({ title: "无管理权限", icon: "none" });
+        return;
+      }
       const form = dishForm.value;
       if (!form.name.trim()) {
         common_vendor.index.showToast({ title: "请输入菜品名称", icon: "none" });
@@ -128,12 +147,16 @@ const _sfc_main = {
           common_vendor.index.showToast({ title: res.msg || "操作失败", icon: "none" });
         }
       } catch (err) {
-        common_vendor.index.__f__("warn", "at pages/canteen/stall.vue:245", "[stall] submitDishForm error", err);
+        common_vendor.index.__f__("warn", "at pages/canteen/stall.vue:267", "[stall] submitDishForm error", err);
         common_vendor.index.showToast({ title: "操作失败", icon: "none" });
       }
       common_vendor.index.hideLoading();
     }
     function confirmDeleteDish(dish) {
+      if (!canManage.value) {
+        common_vendor.index.showToast({ title: "无管理权限", icon: "none" });
+        return;
+      }
       common_vendor.index.showModal({
         title: "确认删除",
         content: `确定要删除「${dish.name}」吗？`,
@@ -178,11 +201,14 @@ const _sfc_main = {
       } : {}, {
         j: common_vendor.s(cardStyle.value),
         k: common_vendor.t(dishList.value.length),
-        l: common_vendor.s(addBtnStyle.value),
-        m: common_vendor.o(showAddDish, "7c"),
-        n: dishList.value.length
+        l: canManage.value
+      }, canManage.value ? {
+        m: common_vendor.s(addBtnStyle.value),
+        n: common_vendor.o(showAddDish, "f1")
+      } : {}, {
+        o: dishList.value.length
       }, dishList.value.length ? {
-        o: common_vendor.f(dishList.value, (dish, k0, i0) => {
+        p: common_vendor.f(dishList.value, (dish, k0, i0) => {
           return common_vendor.e({
             a: common_vendor.t(dish.name),
             b: dish.tag
@@ -201,24 +227,26 @@ const _sfc_main = {
             i: dish.vibe
           }, dish.vibe ? {
             j: common_vendor.t(dish.vibe)
-          } : {}, {
+          } : {}, canManage.value ? {
             k: common_vendor.o(($event) => showEditDish(dish), dish.id),
-            l: common_vendor.o(($event) => confirmDeleteDish(dish), dish.id),
+            l: common_vendor.o(($event) => confirmDeleteDish(dish), dish.id)
+          } : {}, {
             m: dish.id
           });
         }),
-        p: common_vendor.s(cardStyle.value)
+        q: canManage.value,
+        r: common_vendor.s(cardStyle.value)
       } : {
-        q: common_vendor.s(cardStyle.value)
+        s: common_vendor.s(cardStyle.value)
       }, {
-        r: showDishForm.value
+        t: showDishForm.value
       }, showDishForm.value ? {
-        s: common_vendor.t(isEditing.value ? "编辑菜品" : "添加菜品"),
-        t: dishForm.value.name,
-        v: common_vendor.o(($event) => dishForm.value.name = $event.detail.value, "a8"),
-        w: dishForm.value.category,
-        x: common_vendor.o(($event) => dishForm.value.category = $event.detail.value, "1a"),
-        y: common_vendor.f(tagOptions, (tag, k0, i0) => {
+        v: common_vendor.t(isEditing.value ? "编辑菜品" : "添加菜品"),
+        w: dishForm.value.name,
+        x: common_vendor.o(($event) => dishForm.value.name = $event.detail.value, "7b"),
+        y: dishForm.value.category,
+        z: common_vendor.o(($event) => dishForm.value.category = $event.detail.value, "f2"),
+        A: common_vendor.f(tagOptions, (tag, k0, i0) => {
           return {
             a: common_vendor.t(tag),
             b: dishForm.value.tag === tag ? "#fff" : theme.value.accent,
@@ -227,18 +255,18 @@ const _sfc_main = {
             e: common_vendor.o(($event) => dishForm.value.tag = dishForm.value.tag === tag ? "" : tag, tag)
           };
         }),
-        z: dishForm.value.price,
-        A: common_vendor.o(($event) => dishForm.value.price = $event.detail.value, "41"),
-        B: dishForm.value.vibe,
-        C: common_vendor.o(($event) => dishForm.value.vibe = $event.detail.value, "4c"),
-        D: common_vendor.o(closeDishForm, "e6"),
-        E: common_vendor.t(isEditing.value ? "保存" : "添加"),
-        F: common_vendor.s(confirmBtnStyle.value),
-        G: common_vendor.o(submitDishForm, "10"),
-        H: common_vendor.s(cardStyle.value),
-        I: common_vendor.o(closeDishForm, "b6")
+        B: dishForm.value.price,
+        C: common_vendor.o(($event) => dishForm.value.price = $event.detail.value, "4d"),
+        D: dishForm.value.vibe,
+        E: common_vendor.o(($event) => dishForm.value.vibe = $event.detail.value, "3b"),
+        F: common_vendor.o(closeDishForm, "02"),
+        G: common_vendor.t(isEditing.value ? "保存" : "添加"),
+        H: common_vendor.s(confirmBtnStyle.value),
+        I: common_vendor.o(submitDishForm, "02"),
+        J: common_vendor.s(cardStyle.value),
+        K: common_vendor.o(closeDishForm, "3e")
       } : {}, {
-        J: common_vendor.s(pageStyle.value)
+        L: common_vendor.s(pageStyle.value)
       });
     };
   }

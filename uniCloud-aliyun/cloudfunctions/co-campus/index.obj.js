@@ -380,7 +380,12 @@ module.exports = {
    * @param {object} stallData - { name, category, remark }
    * @returns {{ code: number, data?: object, msg?: string }}
    */
-  async addStall(canteenId, stallData = {}) {
+  async addStall(token, canteenId, stallData = {}) {
+    const openid = await this._verifyAdmin(token)
+    if (!openid) {
+      return { code: -1, msg: '无管理权限' }
+    }
+
     if (!canteenId) {
       return { code: -1, msg: '缺少饭堂ID' }
     }
@@ -426,7 +431,12 @@ module.exports = {
    * @param {object} stallData - { name, category, remark }
    * @returns {{ code: number, msg?: string }}
    */
-  async updateStall(canteenId, stallId, stallData = {}) {
+  async updateStall(token, canteenId, stallId, stallData = {}) {
+    const openid = await this._verifyAdmin(token)
+    if (!openid) {
+      return { code: -1, msg: '无管理权限' }
+    }
+
     if (!canteenId || !stallId) {
       return { code: -1, msg: '缺少参数' }
     }
@@ -457,7 +467,12 @@ module.exports = {
    * @param {string} stallId - 档口ID
    * @returns {{ code: number, msg?: string }}
    */
-  async deleteStall(canteenId, stallId) {
+  async deleteStall(token, canteenId, stallId) {
+    const openid = await this._verifyAdmin(token)
+    if (!openid) {
+      return { code: -1, msg: '无管理权限' }
+    }
+
     if (!canteenId || !stallId) {
       return { code: -1, msg: '缺少参数' }
     }
@@ -535,7 +550,12 @@ module.exports = {
    * @param {object} dishData - { name, category, tag, price, vibe }
    * @returns {{ code: number, data?: object, msg?: string }}
    */
-  async addDish(stallId, canteenId, dishData = {}) {
+  async addDish(token, stallId, canteenId, dishData = {}) {
+    const openid = await this._verifyAdmin(token)
+    if (!openid) {
+      return { code: -1, msg: '无管理权限' }
+    }
+
     if (!stallId) {
       return { code: -1, msg: '缺少档口ID' }
     }
@@ -586,7 +606,12 @@ module.exports = {
    * @param {object} dishData - { name, category, tag, price, vibe }
    * @returns {{ code: number, msg?: string }}
    */
-  async updateDish(stallId, dishId, dishData = {}) {
+  async updateDish(token, stallId, dishId, dishData = {}) {
+    const openid = await this._verifyAdmin(token)
+    if (!openid) {
+      return { code: -1, msg: '无管理权限' }
+    }
+
     if (!stallId || !dishId) {
       return { code: -1, msg: '缺少参数' }
     }
@@ -619,7 +644,12 @@ module.exports = {
    * @param {string} dishId - 菜品ID
    * @returns {{ code: number, msg?: string }}
    */
-  async deleteDish(stallId, dishId) {
+  async deleteDish(token, stallId, dishId) {
+    const openid = await this._verifyAdmin(token)
+    if (!openid) {
+      return { code: -1, msg: '无管理权限' }
+    }
+
     if (!stallId || !dishId) {
       return { code: -1, msg: '缺少参数' }
     }
@@ -726,6 +756,11 @@ module.exports = {
    * 验证 token
    * @private
    */
+  async isAdmin(token) {
+    const openid = await this._verifyAdmin(token)
+    return { code: 0, data: { isAdmin: !!openid } }
+  },
+
   async _verifyToken(token) {
     if (!token) return null
     try {
@@ -738,6 +773,14 @@ module.exports = {
     } catch (err) {
       return null
     }
+  },
+
+  async _verifyAdmin(token) {
+    const openid = await this._verifyToken(token)
+    if (!openid || !ADMIN_OPENIDS.includes(openid)) {
+      return null
+    }
+    return openid
   },
 
   /**

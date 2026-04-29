@@ -9,6 +9,7 @@ const _sfc_main = {
     const canteenId = common_vendor.ref("");
     const canteenName = common_vendor.ref("");
     const stallList = common_vendor.ref([]);
+    const canManage = common_vendor.ref(false);
     const showStallForm = common_vendor.ref(false);
     const isEditingStall = common_vendor.ref(false);
     const editingStallId = common_vendor.ref("");
@@ -44,6 +45,7 @@ const _sfc_main = {
     common_vendor.onLoad(async (options) => {
       canteenId.value = (options == null ? void 0 : options.canteenId) || "";
       canteenName.value = decodeURIComponent((options == null ? void 0 : options.canteenName) || "饭堂详情");
+      await refreshManagePermission();
       await loadStalls();
     });
     common_vendor.onShow(async () => {
@@ -60,8 +62,13 @@ const _sfc_main = {
           stallList.value = res.data;
         }
       } catch (err) {
-        common_vendor.index.__f__("warn", "at pages/canteen/detail.vue:149", "[detail] loadStalls error", err);
+        common_vendor.index.__f__("warn", "at pages/canteen/detail.vue:151", "[detail] loadStalls error", err);
       }
+    }
+    async function refreshManagePermission() {
+      var _a;
+      const res = await utils_cloud.cloudIsCampusAdmin();
+      canManage.value = res.code === 0 && !!((_a = res.data) == null ? void 0 : _a.isAdmin);
     }
     function goToStall(stall) {
       common_vendor.index.navigateTo({
@@ -69,12 +76,20 @@ const _sfc_main = {
       });
     }
     function showAddStall() {
+      if (!canManage.value) {
+        common_vendor.index.showToast({ title: "无管理权限", icon: "none" });
+        return;
+      }
       isEditingStall.value = false;
       editingStallId.value = "";
       stallForm.value = { name: "", category: "", remark: "" };
       showStallForm.value = true;
     }
     function showEditStall(stall) {
+      if (!canManage.value) {
+        common_vendor.index.showToast({ title: "无管理权限", icon: "none" });
+        return;
+      }
       isEditingStall.value = true;
       editingStallId.value = stall.id;
       stallForm.value = {
@@ -88,6 +103,10 @@ const _sfc_main = {
       showStallForm.value = false;
     }
     async function submitStallForm() {
+      if (!canManage.value) {
+        common_vendor.index.showToast({ title: "无管理权限", icon: "none" });
+        return;
+      }
       const form = stallForm.value;
       if (!form.name.trim()) {
         common_vendor.index.showToast({ title: "请输入商铺名称", icon: "none" });
@@ -114,12 +133,16 @@ const _sfc_main = {
           common_vendor.index.showToast({ title: res.msg || "操作失败", icon: "none" });
         }
       } catch (err) {
-        common_vendor.index.__f__("warn", "at pages/canteen/detail.vue:212", "[detail] submitStallForm error", err);
+        common_vendor.index.__f__("warn", "at pages/canteen/detail.vue:234", "[detail] submitStallForm error", err);
         common_vendor.index.showToast({ title: "操作失败", icon: "none" });
       }
       common_vendor.index.hideLoading();
     }
     function confirmDeleteStall(stall) {
+      if (!canManage.value) {
+        common_vendor.index.showToast({ title: "无管理权限", icon: "none" });
+        return;
+      }
       common_vendor.index.showModal({
         title: "确认删除",
         content: `确定要删除商铺「${stall.name}」吗？该商铺下的所有菜品也会被删除。`,
@@ -153,11 +176,14 @@ const _sfc_main = {
         b: common_vendor.t(canteenName.value),
         c: `${common_vendor.unref(statusBarHeight) + 12}px`,
         d: common_vendor.t(stallList.value.length),
-        e: common_vendor.s(addBtnStyle.value),
-        f: common_vendor.o(showAddStall, "03"),
-        g: stallList.value.length
+        e: canManage.value
+      }, canManage.value ? {
+        f: common_vendor.s(addBtnStyle.value),
+        g: common_vendor.o(showAddStall, "d0")
+      } : {}, {
+        h: stallList.value.length
       }, stallList.value.length ? {
-        h: common_vendor.f(stallList.value, (stall, k0, i0) => {
+        i: common_vendor.f(stallList.value, (stall, k0, i0) => {
           return common_vendor.e({
             a: common_vendor.t(stall.name),
             b: stall.category
@@ -169,35 +195,38 @@ const _sfc_main = {
             e: common_vendor.t(stall.remark)
           } : {}, {
             f: common_vendor.t((stall.dishes || []).length),
-            g: common_vendor.o(($event) => goToStall(stall), stall.id),
+            g: common_vendor.o(($event) => goToStall(stall), stall.id)
+          }, canManage.value ? {
             h: common_vendor.o(($event) => showEditStall(stall), stall.id),
-            i: common_vendor.o(($event) => confirmDeleteStall(stall), stall.id),
+            i: common_vendor.o(($event) => confirmDeleteStall(stall), stall.id)
+          } : {}, {
             j: stall.id
           });
         }),
-        i: theme.value.accent,
-        j: common_vendor.s(enterBtnStyle.value),
-        k: common_vendor.s(cardStyle.value)
+        j: theme.value.accent,
+        k: common_vendor.s(enterBtnStyle.value),
+        l: canManage.value,
+        m: common_vendor.s(cardStyle.value)
       } : {
-        l: common_vendor.s(cardStyle.value)
+        n: common_vendor.s(cardStyle.value)
       }, {
-        m: showStallForm.value
+        o: showStallForm.value
       }, showStallForm.value ? {
-        n: common_vendor.t(isEditingStall.value ? "编辑商铺" : "添加商铺"),
-        o: stallForm.value.name,
-        p: common_vendor.o(($event) => stallForm.value.name = $event.detail.value, "8f"),
-        q: stallForm.value.category,
-        r: common_vendor.o(($event) => stallForm.value.category = $event.detail.value, "40"),
-        s: stallForm.value.remark,
-        t: common_vendor.o(($event) => stallForm.value.remark = $event.detail.value, "50"),
-        v: common_vendor.o(closeStallForm, "6e"),
-        w: common_vendor.t(isEditingStall.value ? "保存" : "添加"),
-        x: common_vendor.s(confirmBtnStyle.value),
-        y: common_vendor.o(submitStallForm, "e9"),
-        z: common_vendor.s(cardStyle.value),
-        A: common_vendor.o(closeStallForm, "8c")
+        p: common_vendor.t(isEditingStall.value ? "编辑商铺" : "添加商铺"),
+        q: stallForm.value.name,
+        r: common_vendor.o(($event) => stallForm.value.name = $event.detail.value, "72"),
+        s: stallForm.value.category,
+        t: common_vendor.o(($event) => stallForm.value.category = $event.detail.value, "56"),
+        v: stallForm.value.remark,
+        w: common_vendor.o(($event) => stallForm.value.remark = $event.detail.value, "cc"),
+        x: common_vendor.o(closeStallForm, "9d"),
+        y: common_vendor.t(isEditingStall.value ? "保存" : "添加"),
+        z: common_vendor.s(confirmBtnStyle.value),
+        A: common_vendor.o(submitStallForm, "d8"),
+        B: common_vendor.s(cardStyle.value),
+        C: common_vendor.o(closeStallForm, "57")
       } : {}, {
-        B: common_vendor.s(pageStyle.value)
+        D: common_vendor.s(pageStyle.value)
       });
     };
   }
