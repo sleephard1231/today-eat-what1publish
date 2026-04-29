@@ -147,52 +147,12 @@ async function cloudDeleteDish(stallId, dishId) {
     return { code: -1, msg: "删除菜品失败" };
   }
 }
-async function cloudInitAdminMenus() {
-  try {
-    const co = getCoCampus();
-    return await co.initAdminMenus();
-  } catch (err) {
-    common_vendor.index.__f__("warn", "at utils/cloud.js:414", "[cloud] cloudInitAdminMenus error", err);
-    return { code: -1, msg: "初始化菜单失败" };
-  }
-}
-async function cloudFixAdminMenusUrl() {
-  try {
-    const co = getCoCampus();
-    return await co.fixAdminMenusUrl();
-  } catch (err) {
-    common_vendor.index.__f__("warn", "at utils/cloud.js:427", "[cloud] cloudFixAdminMenusUrl error", err);
-    return { code: -1, msg: "修复菜单URL失败" };
-  }
-}
-async function cloudRunDiagnostics() {
-  try {
-    const co = getCoCampus();
-    return await co.runDiagnostics();
-  } catch (err) {
-    common_vendor.index.__f__("warn", "at utils/cloud.js:440", "[cloud] cloudRunDiagnostics error", err);
-    return { code: -1, msg: "诊断服务调用失败：" + (err.message || err) };
-  }
-}
-async function cloudInitBaseData() {
-  try {
-    const co = getCoCampus();
-    return await co.initBaseData();
-  } catch (err) {
-    common_vendor.index.__f__("warn", "at utils/cloud.js:453", "[cloud] cloudInitBaseData error", err);
-    return { code: -1, msg: "初始化基础数据失败：" + (err.message || err) };
-  }
-}
 exports.cloudAddDish = cloudAddDish;
 exports.cloudAddStall = cloudAddStall;
 exports.cloudDeleteDish = cloudDeleteDish;
 exports.cloudDeleteStall = cloudDeleteStall;
-exports.cloudFixAdminMenusUrl = cloudFixAdminMenusUrl;
 exports.cloudGetDishesByStall = cloudGetDishesByStall;
 exports.cloudGetStallsByCanteen = cloudGetStallsByCanteen;
-exports.cloudInitAdminMenus = cloudInitAdminMenus;
-exports.cloudInitBaseData = cloudInitBaseData;
-exports.cloudRunDiagnostics = cloudRunDiagnostics;
 exports.cloudSubmitApplication = cloudSubmitApplication;
 exports.cloudSyncHistory = cloudSyncHistory;
 exports.cloudSyncState = cloudSyncState;

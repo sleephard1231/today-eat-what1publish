@@ -997,12 +997,12 @@ module.exports = {
 
     // ====== 3. 初始化商铺表（同德饭堂的档口） ======
     const stallList = [
-      { _id: 'gzcc-tongde-dazhong', name: '大众食堂', canteenId: 'gzcc-tongde', category: '快餐', remark: '家常菜、自选快餐', sort: 1 },
-      { _id: 'gzcc-tongde-mixue', name: '蜜雪冰城', canteenId: 'gzcc-tongde', category: '饮品', remark: '冰淇淋与茶饮', sort: 2 },
-      { _id: 'gzcc-tongde-yuntun', name: '云吞', canteenId: 'gzcc-tongde', category: '粉面', remark: '鲜虾云吞、云吞面', sort: 3 },
-      { _id: 'gzcc-tongde-jiaozi', name: '饺子馆', canteenId: 'gzcc-tongde', category: '面食', remark: '手工水饺、蒸饺', sort: 4 },
-      { _id: 'gzcc-tongde-shaola', name: '烧腊档', canteenId: 'gzcc-tongde', category: '烧腊', remark: '叉烧、烧鸭、白切鸡', sort: 5 },
-      { _id: 'gzcc-tongde-xiaochao', name: '小炒窗口', canteenId: 'gzcc-tongde', category: '小炒', remark: '现炒家常菜', sort: 6 }
+      { _id: 'gzcc-tongde-dazhong', name: '大众食堂', canteenId: 'gzcc-tongde', campusName: '广州商学院', category: '快餐', remark: '家常菜、自选快餐', sort: 1 },
+      { _id: 'gzcc-tongde-mixue', name: '蜜雪冰城', canteenId: 'gzcc-tongde', campusName: '广州商学院', category: '饮品', remark: '冰淇淋与茶饮', sort: 2 },
+      { _id: 'gzcc-tongde-yuntun', name: '云吞', canteenId: 'gzcc-tongde', campusName: '广州商学院', category: '粉面', remark: '鲜虾云吞、云吞面', sort: 3 },
+      { _id: 'gzcc-tongde-jiaozi', name: '饺子馆', canteenId: 'gzcc-tongde', campusName: '广州商学院', category: '面食', remark: '手工水饺、蒸饺', sort: 4 },
+      { _id: 'gzcc-tongde-shaola', name: '烧腊档', canteenId: 'gzcc-tongde', campusName: '广州商学院', category: '烧腊', remark: '叉烧、烧鸭、白切鸡', sort: 5 },
+      { _id: 'gzcc-tongde-xiaochao', name: '小炒窗口', canteenId: 'gzcc-tongde', campusName: '广州商学院', category: '小炒', remark: '现炒家常菜', sort: 6 }
     ]
 
     for (const st of stallList) {
