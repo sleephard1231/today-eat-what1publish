@@ -34,6 +34,39 @@
       "title": "服务商",
       "defaultValue": "dashscope"
     },
+    "providerType": {
+      "bsonType": "string",
+      "description": "供应商类型，支持 dashscope/openai-compatible/openai/deepseek",
+      "title": "供应商类型",
+      "defaultValue": "dashscope"
+    },
+    "providerName": {
+      "bsonType": "string",
+      "description": "供应商显示名称",
+      "title": "供应商名称",
+      "defaultValue": "通义千问 DashScope"
+    },
+    "remark": {
+      "bsonType": "string",
+      "description": "备注",
+      "title": "备注"
+    },
+    "websiteUrl": {
+      "bsonType": "string",
+      "description": "官网链接",
+      "title": "官网链接"
+    },
+    "apiUrl": {
+      "bsonType": "string",
+      "description": "AI API 请求地址",
+      "title": "API请求地址"
+    },
+    "useFullUrl": {
+      "bsonType": "bool",
+      "description": "是否使用完整 API URL",
+      "title": "完整URL",
+      "defaultValue": true
+    },
     "model": {
       "bsonType": "string",
       "description": "模型名称",
@@ -60,8 +93,22 @@
     },
     "apiKey": {
       "bsonType": "string",
-      "description": "DashScope API Key，仅云对象读取，后台读取时会掩码",
+      "description": "AI API Key，仅云对象读取，后台读取时会掩码",
       "title": "API Key"
+    },
+    "usage": {
+      "bsonType": "object",
+      "description": "AI 调用用量统计",
+      "properties": {
+        "totalCalls": { "bsonType": "int", "description": "累计调用次数" },
+        "totalTokens": { "bsonType": "int", "description": "累计 token" },
+        "promptTokens": { "bsonType": "int", "description": "累计输入 token" },
+        "completionTokens": { "bsonType": "int", "description": "累计输出 token" },
+        "lastTokens": { "bsonType": "int", "description": "最近一次 token" },
+        "lastTestAt": { "bsonType": "timestamp", "description": "最近测试时间" },
+        "lastTestStatus": { "bsonType": "string", "description": "最近测试状态" },
+        "lastTestMessage": { "bsonType": "string", "description": "最近测试信息" }
+      }
     },
     "updatedBy": {
       "bsonType": "string",

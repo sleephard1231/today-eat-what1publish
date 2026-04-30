@@ -292,22 +292,31 @@ syncAppData(token, { stateData, historyList })
 }
 ```
 
-## 风险 5：饭堂详情页首次进入可能重复拉取档口数据
+## 风险 5：饭堂详情页首次进入可能重复拉取档口数据（未完全修复）
 
 风险等级：中
 
+修复状态：部分修复。`onShow` 中已增加 `if (canteenId.value)` 判空（`detail.vue:137`），但首次进入时 `onLoad` 已设置 `canteenId.value`，因此 `onShow` 仍会触发第二次 `loadStalls()`，未实现 review 建议的 `hasLoaded` 标记。
+
 相关位置：
 
-- `pages/canteen/detail.vue`
+- `pages/canteen/detail.vue:128-141`
 
-问题说明：
+当前代码：
 
-`detail.vue` 中：
+```js
+onLoad(async (options) => {
+  canteenId.value = options?.canteenId || ''
+  // ...
+  await loadStalls()  // 第一次请求
+})
 
-- `onLoad` 会调用 `loadStalls()`。
-- `onShow` 也会调用 `loadStalls()`。
-
-在 uni-app 页面生命周期里，首次进入页面时通常会先触发 `onLoad`，随后触发 `onShow`。因此首次进入详情页时，可能连续请求两次同一个饭堂的档口数据。
+onShow(async () => {
+  if (canteenId.value) {  // onLoad 已赋值，此条件为 true
+    await loadStalls()    // 第二次请求（重复）
+  }
+})
+```
 
 为什么会影响调用量：
 
@@ -589,9 +598,12 @@ eat-what-services:
 
 风险等级：中
 
+修复状态：未修复。云端 `co-campus.submitApplication` 和前端 `pages/campus/join.vue` 均未实现用户级频率限制。
+
 相关位置：
 
 - `co-campus.submitApplication`
+- `pages/campus/join.vue:285-320` — `submitForm` 无防重复提交、无每日次数限制
 
 问题说明：
 
@@ -622,18 +634,21 @@ eat-what-services:
 
 风险等级：中低
 
+修复状态：未修复。以下 3 处 `app-state.js` 中的函数仍直接调用 `uniCloud.importObject('co-campus')`，未走 `utils/cloud.js` 统一封装。
+
+具体位置：
+
+1. `utils/app-state.js:638` — `fetchCloudCanteens` 内直接 `uniCloud.importObject('co-campus')`，调用 `getCanteensByCampus`
+2. `utils/app-state.js:867` — `fetchCloudStalls` 内直接 `uniCloud.importObject('co-campus')`，调用 `getStallsByCanteen`
+3. `utils/app-state.js:893` — `fetchCanteenFullData` 内直接 `uniCloud.importObject('co-campus')`，调用 `getCanteenFullData`
+
 相关位置：
 
-- `utils/app-state.js`
+- `utils/app-state.js:638,867,893`
 
 问题说明：
 
-项目文档里写了“所有云对象调用统一通过 `utils/cloud.js`，页面里不要直接 `uniCloud.importObject`”。但 `utils/app-state.js` 里仍然直接调用：
-
-- `uniCloud.importObject('co-campus')`
-- `getCanteensByCampus`
-- `getStallsByCanteen`
-- `getCanteenFullData`
+项目文档里写了”所有云对象调用统一通过 `utils/cloud.js`，页面里不要直接 `uniCloud.importObject`”。但 `utils/app-state.js` 里仍然直接调用。
 
 为什么会影响调用量治理：
 
