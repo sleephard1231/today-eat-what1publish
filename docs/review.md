@@ -784,6 +784,90 @@ eat-what-services:
 - AI 失败时不要重试太多次，直接使用模板文案。
 - 对相同上下文缓存 AI 结果。
 
+## 风险 17：多页面存在 onLoad + onShow 重复刷新（审查补充）
+
+风险等级：中
+
+修复状态：未修复。以下 3 个页面首次进入时都会因 `onLoad` → `onShow` 顺序触发导致重复执行刷新逻辑。
+
+### 17a. `pages/canteen/canteen.vue`
+
+相关位置：`pages/canteen/canteen.vue:73-84`
+
+```js
+onLoad(async () => {
+  refreshPage()           // 第一次刷新
+  // fetchCloudCanteens()
+})
+
+onShow(refreshPage)       // 第二次刷新
+```
+
+### 17b. `pages/history/index.vue`
+
+相关位置：`pages/history/index.vue:51-57`
+
+```js
+onLoad(() => {
+  refreshData()           // 第一次刷新
+})
+
+onShow(() => {
+  refreshData()           // 第二次刷新
+})
+```
+
+### 17c. `pages/my/my.vue`
+
+相关位置：`pages/my/my.vue:312-318`
+
+```js
+onLoad(() => {
+  refreshState()
+  uni.$on('user-state-changed', onUserStateChange)
+  uni.$on('app-state-changed', refreshState)
+})
+
+onShow(refreshState)       // 重复刷新 + 事件监听也可能导致额外刷新
+```
+
+问题说明：这些页面首次进入时 `onLoad` 和 `onShow` 会连续触发，导致首屏数据刷新执行两次。对于有云调用的页面（如 canteen.vue），会产生额外的云对象调用。
+
+建议修复：统一采用 `hasLoaded` 标记模式，`onShow` 仅在非首次进入时触发刷新。
+
+---
+
+## 风险 18：校园入驻入口显示与实际功能不一致（审查补充）
+
+风险等级：低
+
+修复状态：待决策。
+
+相关位置：
+- `pages/campus/select.vue:347-348` — `goJoinPage()` 始终弹出 toast "🚧 校园入驻功能待开放"
+- `pages/campus/join.vue` — 已完整实现入驻申请表单、云端提交、隐私协议等功能
+
+问题说明：`join.vue` 页面已经完整实现，但 `select.vue` 中的入口仍然提示"待开放"，用户无法从 UI 进入。这是一个入口不一致问题 — 要么是故意关闭了入口（功能未准备好），要么是遗漏了更新。
+
+建议：确认入驻功能是否要上线。如果要上线，修改 `goJoinPage()` 跳转到 `/pages/campus/join`；如果暂不上线，可在线上隐藏该入口。
+
+---
+
+## 风险 19：AI 调用在本地登录模式下静默失败（审查补充）
+
+风险等级：低
+
+相关位置：
+- `utils/cloud.js:444-454` — `aiPickDishFromCandidates` 要求 token，无 token 直接返回 `{ code: -1, msg: '请先登录' }`
+- `utils/app-state.js:804` — `aiPickFromCandidates` 调用 `aiPickDishFromCandidates`
+- `pages/index/index.vue:343-353` — `handleDrawMeal` 中 `aiPickFromCandidates` 被 catch 捕获，静默失败
+
+问题说明：`aiPickDishFromCandidates` 内部调用 `getStoredUserToken()`，如果用户是本地登录模式（`loginMode: 'local'`），`getStoredUserToken()` 返回空字符串，AI 调用直接失败返回 `{ code: -1 }`。前端用 `.catch()` 捕获后只 `console.warn`，用户无感知。好消息是当前首页 `handleDrawMeal` 先展示了模板结果，AI 失败不会影响用户体验。但这是一个已知的静默降级路径，值得在文档中明确记录。
+
+建议：当前行为是合理的降级策略（AI 失败 → 保持模板推荐），无需紧急修改。后续若想优化，可在 `aiPickFromCandidates` 中对本地用户直接返回 fallback，跳过不必要的云对象调用尝试。
+
+---
+
 ## 推荐整改顺序
 
 ### 第一阶段：必须先修
