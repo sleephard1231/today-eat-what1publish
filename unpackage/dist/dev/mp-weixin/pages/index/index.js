@@ -134,12 +134,31 @@ const _sfc_main = {
         chipBounceTimer = null;
       }, 420);
     }
-    function handleDrawMeal() {
+    function applyAiPick(aiPick, candidates) {
+      if (!(aiPick == null ? void 0 : aiPick.isAI) || !popupResult.value)
+        return;
+      const chosen = candidates[aiPick.choice] || candidates[0];
+      popupResult.value = {
+        ...popupResult.value,
+        mealName: chosen.name,
+        vibe: chosen.vibe,
+        canteen: popupResult.value.mode === "campus" ? chosen.canteen || popupResult.value.canteen : "",
+        source: chosen.source || popupResult.value.source,
+        dishId: chosen.id || popupResult.value.dishId,
+        stallId: chosen.stallId || popupResult.value.stallId,
+        stallName: chosen.stallName || popupResult.value.stallName,
+        category: chosen.category || popupResult.value.category,
+        price: chosen.price || popupResult.value.price,
+        reason: aiPick.reason
+      };
+      utils_appState.updateLatestMealResult(popupResult.value);
+    }
+    async function handleDrawMeal() {
       if (isDrawing.value)
         return;
       clearRevealTimers();
       showResultPopup.value = false;
-      const drawResult = utils_appState.drawMealResult();
+      const drawResult = await utils_appState.drawMealResultAsync();
       state.value = drawResult.state;
       utils_appState.applyTabBarTheme(drawResult.state.mode);
       animateFortuneProgress();
@@ -154,6 +173,17 @@ const _sfc_main = {
         showResultPopup.value = true;
         drawTimer = null;
       }, 1500);
+      utils_appState.aiPickFromCandidates({
+        candidates: drawResult.candidates,
+        state: drawResult.state,
+        fortune: fortune.value,
+        seed: drawResult.seed,
+        selectedCanteenNames: drawResult.selectedCanteenNames
+      }).then((aiPick) => {
+        applyAiPick(aiPick, drawResult.candidates);
+      }).catch((err) => {
+        common_vendor.index.__f__("warn", "at pages/index/index.vue:352", "[index] ai pick failed", (err == null ? void 0 : err.message) || err);
+      });
     }
     function closeResultPopup() {
       showResultPopup.value = false;

@@ -942,3 +942,136 @@ onShow(refreshState)       // 重复刷新 + 事件监听也可能导致额外�
 当前项目已经有基础的防抖和缓存意识，方向是对的。真正需要马上处理的是“权限”和“AI 成本入口”。这两个不修，即使普通用户调用量不高，也可能因为接口被滥用导致云函数调用量、数据库写入量、AI 费用突然上升。
 
 如果按本报告的优先级整改，调用量会从“靠用户自觉不乱点”变成“系统本身能抗住正常增长和一定恶意调用”。
+
+---
+
+## 追加审查：数据库查询调用量异常排查
+
+排查时间：2026-04-30
+
+结论：
+
+数据库读写确实有几个可能放大调用量的点，但它们更容易影响“数据库读/写次数”和“云对象调用次数”，不一定直接解释 GBs 暴涨。GBs 更常见的来源仍然是定时云函数、长耗时请求、超时时间过长或内存配置偏大。
+
+### 风险 1：`co-campus` 公开读接口每次都直接查库
+
+风险等级：中
+
+相关位置：
+
+- `uniCloud-aliyun/cloudfunctions/co-campus/index.obj.js`
+
+涉及接口：
+
+- `getApprovedCampuses()`
+- `getCanteensByCampus(campusName)`
+- `getStallsByCanteen(canteenId)`
+- `getNormalDishCandidates(limit)`
+- `getCampusDishCandidates(canteenIds, limit)`
+- `getCanteenFullData(campusName)`
+- `getServicesByCampus(campusName)`
+- `getDishesByStall(stallId)`
+
+问题说明：
+
+这些接口属于读多写少的数据。尤其校园版推荐池 `getCampusDishCandidates` 一次会查饭堂、商铺、菜品三张表；饭堂详情 `getStallsByCanteen` 一次会查商铺和菜品两张表。如果页面反复进入、后台频繁刷新，数据库读次数会被放大。
+
+已处理：
+
+- 已给上述公开读接口增加 60 秒云对象内存缓存。
+- 同参数 60 秒内再次调用，会直接返回缓存结果，不再打数据库。
+- 档口、菜品、申请审核等写操作完成后会清空缓存，避免后台改完数据后长期看不到新内容。
+
+剩余注意：
+
+- 云对象内存缓存不是永久缓存，云函数实例重启后会失效。
+- 这是为了削峰，不是替代数据库索引。
+- 上线后仍建议给高频字段建索引：`status`、`campusName`、`canteenId`、`stallId`、`openid`、`createdAt`、`updatedAt`。
+
+### 风险 2：饭堂详情页首屏可能重复查商铺
+
+风险等级：中
+
+相关位置：
+
+- `pages/canteen/detail.vue`
+
+问题说明：
+
+页面原来在 `onLoad` 里执行一次 `loadStalls()`，同时 `onShow` 里也会执行一次 `loadStalls()`。uni-app 页面首次进入时通常会先触发 `onLoad`，随后触发 `onShow`，这会导致首次进入饭堂详情页可能连续请求两次商铺和菜品数据。
+
+已处理：
+
+- 已增加 `skipNextShow` 标记。
+- 首次进入页面时只走 `onLoad` 的 `loadStalls()`。
+- 从商铺菜品页返回详情页时，`onShow` 仍然会刷新数据。
+
+### 风险 3：用户状态和历史同步会产生额外读写
+
+风险等级：中
+
+相关位置：
+
+- `utils/app-state.js`
+- `uniCloud-aliyun/cloudfunctions/co-user/index.obj.js`
+
+问题说明：
+
+用户每次抽餐后，前端会保存本地状态，并异步同步：
+
+- `syncState`
+- `syncHistory`
+
+原逻辑里每次同步都需要先验证 token，再查询状态/历史记录是否存在，然后再更新或新增。一次抽餐可能拆成多次数据库读写。
+
+已处理：
+
+- `co-user` 已增加 60 秒 token 验证缓存，同一云函数实例内短时间多次同步可以少查一次用户表。
+- `syncState` 和 `syncHistory` 已改成先按 `openid` 更新，更新不到再新增，减少一次“先查是否存在”的数据库读取。
+
+后续建议：
+
+- 更进一步可以把 `syncState` 和 `syncHistory` 合成一个 `syncAppData` 接口。
+- 或者只在用户退出页面、抽餐结束后合并同步一次，减少写频率。
+
+### 风险 4：后台首页统计查询较重
+
+风险等级：中
+
+相关位置：
+
+- `E:\AWeApptext\吃什么新版\admin\pages\index\index.vue`
+
+问题说明：
+
+后台首页会统计校园、饭堂、商铺、菜品、普通版菜品、用户、待审核申请，还会加载趋势图和最近记录。一次首页刷新会产生多次 `count()` 和 `get()`。如果你频繁回首页或点击刷新，数据库读次数会明显增加。
+
+已处理：
+
+- 后台首页已有本地缓存。
+- 缓存时间已从 60 秒调整为 5 分钟。
+- 手动点击“刷新”仍然会强制重新查询，适合你确实要看最新统计时使用。
+
+后续建议：
+
+- 如果数据量上来，可以做一个专门的云对象接口，例如 `co-admin.getDashboardSummary()`，由云端统一聚合并缓存。
+- 趋势数据可以每天定时汇总到统计表，首页只读汇总结果。
+
+### 风险 5：本地删除云函数不等于云端已停用
+
+风险等级：严重
+
+相关位置：
+
+- `E:\AWeApptext\吃什么新版\admin\uniCloud-aliyun\cloudfunctions\uni-stat-cron`
+- `E:\AWeApptext\吃什么新版\admin\uniCloud-aliyun\cloudfunctions\uni-analyse-searchhot`
+
+问题说明：
+
+本地已经删除统计相关云函数目录，但如果它们之前已经上传部署到 uniCloud，云端仍可能继续存在并运行。定时云函数会在你“不操作前端和后台”的情况下继续消耗云函数资源。
+
+建议：
+
+- 到 DCloud / uniCloud 控制台确认 `uni-stat-cron` 和 `uni-analyse-searchhot` 是否仍存在。
+- 如果存在，手动删除或停用。
+- 再观察 24 小时用量曲线，看 GBs 是否明显下降。

@@ -85,6 +85,7 @@ const canteenId = ref('')
 const canteenName = ref('')
 const stallList = ref([])
 const canManage = ref(false)
+const skipNextShow = ref(true)
 
 const showStallForm = ref(false)
 const isEditingStall = ref(false)
@@ -134,6 +135,11 @@ onLoad(async (options) => {
 })
 
 onShow(async () => {
+  if (skipNextShow.value) {
+    skipNextShow.value = false
+    return
+  }
+
   // 从 stall 页面返回时刷新数据
   if (canteenId.value) {
     await loadStalls()

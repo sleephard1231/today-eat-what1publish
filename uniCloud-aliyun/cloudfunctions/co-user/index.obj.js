@@ -13,11 +13,30 @@ const WX_APPSECRET = '9a2f13b99c9f0c1c9b106e5552d74b3e'
 
 // token 有效期 7 天
 const TOKEN_EXPIRE_MS = 7 * 24 * 60 * 60 * 1000
+const TOKEN_CACHE_TTL = 60 * 1000
+const tokenCache = new Map()
 
 const db = uniCloud.database()
 const usersCollection = db.collection('eat-what-users')
 const stateCollection = db.collection('eat-what-state')
 const historyCollection = db.collection('eat-what-history')
+
+function getTokenCache(token) {
+  const cached = tokenCache.get(token)
+  if (!cached) return null
+  if (Date.now() > cached.expiresAt) {
+    tokenCache.delete(token)
+    return null
+  }
+  return cached.openid
+}
+
+function setTokenCache(token, openid) {
+  tokenCache.set(token, {
+    openid,
+    expiresAt: Date.now() + TOKEN_CACHE_TTL
+  })
+}
 
 module.exports = {
   /**
@@ -222,11 +241,10 @@ module.exports = {
     if (stateData.stats !== undefined) updateFields.stats = stateData.stats
     if (stateData.selectedCanteen !== undefined) updateFields.selectedCanteen = stateData.selectedCanteen
 
-    const { data: existState } = await stateCollection.where({ openid }).limit(1).get()
+    const updateRes = await stateCollection.where({ openid }).update(updateFields)
+    const updated = updateRes.updated || updateRes.result?.updated || 0
 
-    if (existState.length) {
-      await stateCollection.doc(existState[0]._id).update(updateFields)
-    } else {
+    if (!updated) {
       await stateCollection.add({
         openid,
         ...stateData,
@@ -281,14 +299,13 @@ module.exports = {
 
     const records = Array.isArray(historyList) ? historyList.slice(0, 30) : []
 
-    const { data: existHistory } = await historyCollection.where({ openid }).limit(1).get()
+    const updateRes = await historyCollection.where({ openid }).update({
+      records,
+      updatedAt: Date.now()
+    })
+    const updated = updateRes.updated || updateRes.result?.updated || 0
 
-    if (existHistory.length) {
-      await historyCollection.doc(existHistory[0]._id).update({
-        records,
-        updatedAt: Date.now()
-      })
-    } else {
+    if (!updated) {
       await historyCollection.add({
         openid,
         records,
@@ -337,6 +354,9 @@ module.exports = {
   async _verifyToken(token) {
     if (!token) return null
 
+    const cachedOpenid = getTokenCache(token)
+    if (cachedOpenid) return cachedOpenid
+
     try {
       const { data: users } = await usersCollection.where({ token }).limit(1).get()
       if (!users.length) return null
@@ -348,6 +368,7 @@ module.exports = {
         return null
       }
 
+      setTokenCache(token, user.openid)
       return user.openid
     } catch (err) {
       console.warn('[co-user] _verifyToken error', err)

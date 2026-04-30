@@ -29,6 +29,12 @@ const usersCollection = db.collection('eat-what-users')
 const aiConfigCollection = db.collection('eat-what-ai-config')
 
 const AI_CONFIG_ID = 'default'
+const CONFIG_CACHE_TTL = 30 * 1000
+const aiConfigCache = {
+  value: null,
+  expireAt: 0
+}
+const adminTokenCache = {}
 const DEFAULT_AI_CONFIG = {
   enable: false,
   enableNormal: true,
@@ -128,9 +134,16 @@ function recordDailyPick(openid) {
 }
 
 async function getAiConfig() {
+  const now = Date.now()
+  if (aiConfigCache.value && now < aiConfigCache.expireAt) {
+    return aiConfigCache.value
+  }
   try {
     const { data } = await aiConfigCollection.doc(AI_CONFIG_ID).get()
-    return normalizeAiConfig(data && data.length ? data[0] : {})
+    const config = normalizeAiConfig(data && data.length ? data[0] : {})
+    aiConfigCache.value = config
+    aiConfigCache.expireAt = now + CONFIG_CACHE_TTL
+    return config
   } catch (err) {
     console.warn('[co-ai] get config failed, fallback default', err.message || err)
     return normalizeAiConfig({})
@@ -235,7 +248,7 @@ async function requestChatCompletion(config, messages, options = {}) {
       'Content-Type': 'application/json'
     },
     data: request.body,
-    timeout: options.timeout || 8000
+    timeout: options.timeout || 5000
   })
 
   const data = res.data || {}
@@ -336,12 +349,21 @@ function toClientAiConfig(config = {}) {
   }
 
 async function verifyConfigAdmin(context, token = '') {
+  if (token && adminTokenCache[token] && Date.now() < adminTokenCache[token].expireAt) {
+    return adminTokenCache[token].admin
+  }
+
   const tokenAdmin = await verifyUniIdAdmin(context, token)
-  if (tokenAdmin) return tokenAdmin
+  if (tokenAdmin) {
+    if (token) adminTokenCache[token] = { admin: tokenAdmin, expireAt: Date.now() + CONFIG_CACHE_TTL }
+    return tokenAdmin
+  }
 
   const openid = await verifyToken(token)
   if (openid && ADMIN_OPENIDS.includes(openid)) {
-    return { openid }
+    const admin = { openid }
+    if (token) adminTokenCache[token] = { admin, expireAt: Date.now() + CONFIG_CACHE_TTL }
+    return admin
   }
 
   return null
@@ -456,7 +478,7 @@ module.exports = {
       ], {
         temperature: 0.85,
         maxTokens: 150,
-        timeout: 10000
+        timeout: 6000
       })
 
       if (result.content) {
@@ -620,7 +642,7 @@ module.exports = {
       ], {
         temperature: 0.9,
         maxTokens: 80,
-        timeout: 8000
+        timeout: 5000
       })
 
       if (result.content) {
@@ -682,6 +704,8 @@ module.exports = {
         createdAt: now
       })
     }
+    aiConfigCache.value = null
+    aiConfigCache.expireAt = 0
 
     return { code: 0, msg: '保存成功', data: toClientAiConfig(saveData) }
   },
@@ -713,7 +737,7 @@ module.exports = {
       ], {
         temperature: 0.1,
         maxTokens: 20,
-        timeout: 8000
+        timeout: 5000
       })
 
       if (result.content) {

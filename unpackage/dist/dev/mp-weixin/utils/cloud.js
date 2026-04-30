@@ -3,6 +3,7 @@ const common_vendor = require("../common/vendor.js");
 let cloudReady = false;
 let coUser = null;
 let coCampus = null;
+let coAi = null;
 function getStoredUserToken() {
   try {
     const user = common_vendor.index.getStorageSync("eat-what-user") || {};
@@ -22,6 +23,12 @@ function getCoCampus() {
     coCampus = common_vendor._r.importObject("co-campus");
   }
   return coCampus;
+}
+function getCoAi() {
+  if (!coAi) {
+    coAi = common_vendor._r.importObject("co-ai");
+  }
+  return coAi;
 }
 async function cloudWxLogin(userInfo = {}) {
   try {
@@ -185,11 +192,44 @@ async function cloudIsCampusAdmin() {
     return { code: -1, data: { isAdmin: false }, msg: "管理员身份校验失败" };
   }
 }
+async function cloudGetNormalDishCandidates(limit = 80) {
+  try {
+    const co = getCoCampus();
+    return await co.getNormalDishCandidates(limit);
+  } catch (err) {
+    common_vendor.index.__f__("warn", "at utils/cloud.js:410", "[cloud] cloudGetNormalDishCandidates error", err);
+    return { code: -1, data: [], msg: "获取普通版菜品池失败" };
+  }
+}
+async function cloudGetCampusDishCandidates(canteenIds = [], limit = 120) {
+  try {
+    const co = getCoCampus();
+    return await co.getCampusDishCandidates(canteenIds, limit);
+  } catch (err) {
+    common_vendor.index.__f__("warn", "at utils/cloud.js:425", "[cloud] cloudGetCampusDishCandidates error", err);
+    return { code: -1, data: [], msg: "获取校园版菜品池失败" };
+  }
+}
+async function aiPickDishFromCandidates(payload = {}) {
+  try {
+    const token = getStoredUserToken();
+    if (!token)
+      return { code: -1, msg: "请先登录" };
+    const co = getCoAi();
+    return await co.pickDishFromCandidates(token, payload);
+  } catch (err) {
+    common_vendor.index.__f__("warn", "at utils/cloud.js:451", "[cloud] aiPickDishFromCandidates error", err);
+    return { code: -1, msg: "AI 推荐失败" };
+  }
+}
+exports.aiPickDishFromCandidates = aiPickDishFromCandidates;
 exports.cloudAddDish = cloudAddDish;
 exports.cloudAddStall = cloudAddStall;
 exports.cloudDeleteDish = cloudDeleteDish;
 exports.cloudDeleteStall = cloudDeleteStall;
+exports.cloudGetCampusDishCandidates = cloudGetCampusDishCandidates;
 exports.cloudGetDishesByStall = cloudGetDishesByStall;
+exports.cloudGetNormalDishCandidates = cloudGetNormalDishCandidates;
 exports.cloudGetStallsByCanteen = cloudGetStallsByCanteen;
 exports.cloudIsCampusAdmin = cloudIsCampusAdmin;
 exports.cloudSubmitApplication = cloudSubmitApplication;

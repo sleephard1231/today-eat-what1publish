@@ -23,6 +23,30 @@ const servicesCollection = db.collection('eat-what-services')
 const usersCollection = db.collection('eat-what-users')
 
 const TOKEN_EXPIRE_MS = 7 * 24 * 60 * 60 * 1000
+const READ_CACHE_TTL = 60 * 1000
+const readCache = new Map()
+
+function getReadCache(key) {
+  const cached = readCache.get(key)
+  if (!cached) return null
+  if (Date.now() > cached.expiresAt) {
+    readCache.delete(key)
+    return null
+  }
+  return cached.value
+}
+
+function setReadCache(key, value) {
+  readCache.set(key, {
+    value,
+    expiresAt: Date.now() + READ_CACHE_TTL
+  })
+  return value
+}
+
+function clearReadCache() {
+  readCache.clear()
+}
 
 module.exports = {
   /**
@@ -132,6 +156,10 @@ module.exports = {
    * @returns {{ code: number, data?: Array, msg?: string }}
    */
   async getApprovedCampuses() {
+    const cacheKey = 'approvedCampuses'
+    const cached = getReadCache(cacheKey)
+    if (cached) return cached
+
     // 从 applications 取已通过的
     const { data: approvedApps } = await applicationsCollection
       .where({ status: '已通过' })
@@ -172,7 +200,7 @@ module.exports = {
       }
     })
 
-    return { code: 0, data: campusList }
+    return setReadCache(cacheKey, { code: 0, data: campusList })
   },
 
   /**
@@ -185,19 +213,23 @@ module.exports = {
       return { code: -1, msg: '缺少学校名称' }
     }
 
+    const cacheKey = `canteens:${campusName}`
+    const cached = getReadCache(cacheKey)
+    if (cached) return cached
+
     const { data: canteens } = await canteensCollection
       .where({ campusName, status: 'active' })
       .orderBy('sort', 'asc')
       .get()
 
-    return {
+    return setReadCache(cacheKey, {
       code: 0,
       data: canteens.map((c) => ({
         id: c._id,
         name: c.name,
         remark: c.remark || ''
       }))
-    }
+    })
   },
 
   /**
@@ -210,13 +242,17 @@ module.exports = {
       return { code: -1, msg: '缺少饭堂ID' }
     }
 
+    const cacheKey = `stalls:${canteenId}`
+    const cached = getReadCache(cacheKey)
+    if (cached) return cached
+
     const { data: stalls } = await stallsCollection
       .where({ canteenId, status: 'active' })
       .orderBy('sort', 'asc')
       .get()
 
     if (!stalls.length) {
-      return { code: 0, data: [] }
+      return setReadCache(cacheKey, { code: 0, data: [] })
     }
 
     // 批量查询所有档口的菜品
@@ -245,7 +281,7 @@ module.exports = {
       })
     })
 
-    return {
+    return setReadCache(cacheKey, {
       code: 0,
       data: stalls.map((s) => ({
         id: s._id,
@@ -254,7 +290,7 @@ module.exports = {
         remark: s.remark || '',
         dishes: dishesByStall[s._id] || []
       }))
-    }
+    })
   },
 
   /**
@@ -264,13 +300,17 @@ module.exports = {
    */
   async getNormalDishCandidates(limit = 80) {
     const safeLimit = Math.max(1, Math.min(Number(limit) || 80, 200))
+    const cacheKey = `normalDishes:${safeLimit}`
+    const cached = getReadCache(cacheKey)
+    if (cached) return cached
+
     const { data: dishes } = await normalDishesCollection
       .where({ status: 'active' })
       .orderBy('sort', 'asc')
       .limit(safeLimit)
       .get()
 
-    return {
+    return setReadCache(cacheKey, {
       code: 0,
       data: dishes.map((dish) => ({
         id: dish._id,
@@ -281,7 +321,7 @@ module.exports = {
         vibe: dish.vibe || '',
         source: 'normal'
       }))
-    }
+    })
   },
 
   /**
@@ -300,6 +340,9 @@ module.exports = {
     }
 
     const safeLimit = Math.max(1, Math.min(Number(limit) || 120, 300))
+    const cacheKey = `campusDishes:${ids.slice().sort().join('|')}:${safeLimit}`
+    const cached = getReadCache(cacheKey)
+    if (cached) return cached
 
     const { data: canteens } = await canteensCollection
       .where({ _id: db.command.in(ids), status: 'active' })
@@ -322,7 +365,7 @@ module.exports = {
 
     const stallIds = stalls.map((stall) => stall._id)
     if (!stallIds.length) {
-      return { code: 0, data: [] }
+      return setReadCache(cacheKey, { code: 0, data: [] })
     }
 
     const { data: dishes } = await dishesCollection
@@ -334,7 +377,7 @@ module.exports = {
       .limit(safeLimit)
       .get()
 
-    return {
+    return setReadCache(cacheKey, {
       code: 0,
       data: dishes.map((dish) => {
         const stall = stallMap[dish.stallId] || {}
@@ -353,7 +396,7 @@ module.exports = {
           stallName: stall.name || ''
         }
       })
-    }
+    })
   },
 
   /**
@@ -366,6 +409,10 @@ module.exports = {
       return { code: -1, msg: '缺少学校名称' }
     }
 
+    const cacheKey = `canteenFull:${campusName}`
+    const cached = getReadCache(cacheKey)
+    if (cached) return cached
+
     // 1. 获取饭堂列表
     const { data: canteens } = await canteensCollection
       .where({ campusName, status: 'active' })
@@ -373,7 +420,7 @@ module.exports = {
       .get()
 
     if (!canteens.length) {
-      return { code: 0, data: [] }
+      return setReadCache(cacheKey, { code: 0, data: [] })
     }
 
     const canteenIds = canteens.map((c) => c._id)
@@ -434,7 +481,7 @@ module.exports = {
     })
 
     // 组装最终结果
-    return {
+    return setReadCache(cacheKey, {
       code: 0,
       data: canteens.map((c) => ({
         id: c._id,
@@ -442,7 +489,7 @@ module.exports = {
         remark: c.remark || '',
         stalls: stallsByCanteen[c._id] || []
       }))
-    }
+    })
   },
 
   /**
@@ -455,12 +502,16 @@ module.exports = {
       return { code: -1, msg: '缺少学校名称' }
     }
 
+    const cacheKey = `services:${campusName}`
+    const cached = getReadCache(cacheKey)
+    if (cached) return cached
+
     const { data: services } = await servicesCollection
       .where({ campusName, status: 'active' })
       .orderBy('sort', 'asc')
       .get()
 
-    return {
+    return setReadCache(cacheKey, {
       code: 0,
       data: services.map((s) => ({
         id: s._id,
@@ -469,7 +520,7 @@ module.exports = {
         remark: s.remark || '',
         externalUrl: s.externalUrl || ''
       }))
-    }
+    })
   },
 
   // ====== 档口 CRUD ======
@@ -512,6 +563,8 @@ module.exports = {
       createdAt: now,
       updatedAt: now
     })
+
+    clearReadCache()
 
     return {
       code: 0,
@@ -557,6 +610,8 @@ module.exports = {
     if (stallData.remark !== undefined) updateData.remark = stallData.remark
 
     await stallsCollection.doc(stallId).update(updateData)
+
+    clearReadCache()
 
     return { code: 0, msg: '更新成功' }
   },
@@ -610,6 +665,8 @@ module.exports = {
       await Promise.all(batch)
     }
 
+    clearReadCache()
+
     return { code: 0, msg: '删除成功' }
   },
 
@@ -625,12 +682,16 @@ module.exports = {
       return { code: -1, msg: '缺少档口ID' }
     }
 
+    const cacheKey = `dishes:${stallId}`
+    const cached = getReadCache(cacheKey)
+    if (cached) return cached
+
     const { data: dishes } = await dishesCollection
       .where({ stallId, status: 'active' })
       .orderBy('sort', 'asc')
       .get()
 
-    return {
+    return setReadCache(cacheKey, {
       code: 0,
       data: dishes.map((d) => ({
         id: d._id,
@@ -640,7 +701,7 @@ module.exports = {
         price: d.price || '',
         vibe: d.vibe || ''
       }))
-    }
+    })
   },
 
   /**
@@ -685,6 +746,8 @@ module.exports = {
       createdAt: now,
       updatedAt: now
     })
+
+    clearReadCache()
 
     return {
       code: 0,
@@ -735,6 +798,8 @@ module.exports = {
 
     await dishesCollection.doc(dishId).update(updateData)
 
+    clearReadCache()
+
     return { code: 0, msg: '更新成功' }
   },
 
@@ -768,6 +833,8 @@ module.exports = {
       status: 'inactive',
       updatedAt: Date.now()
     })
+
+    clearReadCache()
 
     return { code: 0, msg: '删除成功' }
   },
@@ -846,6 +913,8 @@ module.exports = {
         }
       }
     }
+
+    clearReadCache()
 
     return { code: 0, msg: status === '已通过' ? '已通过' : '已拒绝' }
   },
