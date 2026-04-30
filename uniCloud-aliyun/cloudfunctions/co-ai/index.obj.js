@@ -7,6 +7,8 @@
  *   const res = await co.generateReason(context)
  */
 
+const db = uniCloud.database()
+
 // ⚠️ 上线前必须填入通义千问 API Key
 // 获取地址：https://dashscope.console.aliyun.com/apiKey
 const DASHSCOPE_API_KEY = '你的dashscope-api-key'
@@ -17,7 +19,11 @@ const DASHSCOPE_URL = 'https://dashscope.aliyuncs.com/api/v1/services/aigc/text-
 // 限流：每用户每分钟最多5次
 const RATE_LIMIT_WINDOW = 60 * 1000
 const RATE_LIMIT_MAX = 5
+const PICK_RATE_LIMIT_MAX = 2
+const DAILY_PICK_LIMIT_MAX = 5
 const userCallLog = {} // { openid: [timestamp, ...] }
+const userDailyPickLog = {} // { openid: { dateKey, count } }
+const usersCollection = db.collection('eat-what-users')
 
 module.exports = {
   /**
@@ -92,6 +98,94 @@ module.exports = {
       return { code: -1, msg: 'AI 生成失败' }
     } catch (err) {
       console.warn('[co-ai] generateReason error', err.message || err)
+      return { code: -1, msg: 'AI 服务暂时不可用' }
+    }
+  },
+
+  /**
+   * AI 从 3 个候选菜品里选择 1 个，并生成推荐理由
+   * @param {string} token
+   * @param {object} payload - { mbti, zodiac, mode, appetite, energy, luck, candidates }
+   * @returns {{ code: number, choice?: number, reason?: string, msg?: string }}
+   */
+  async pickDishFromCandidates(token, payload = {}) {
+    const openid = await this._verifyToken(token)
+    if (!openid) {
+      return { code: -1, msg: '请先登录' }
+    }
+
+    if (!this._checkRateLimit(openid, PICK_RATE_LIMIT_MAX)) {
+      return { code: -1, msg: 'AI 推荐太频繁，请稍后再试' }
+    }
+
+    if (!this._checkDailyPickLimit(openid)) {
+      return { code: -1, msg: '今日 AI 推荐次数已用完' }
+    }
+
+    if (!DASHSCOPE_API_KEY || DASHSCOPE_API_KEY === '你的dashscope-api-key') {
+      console.warn('[co-ai] DASHSCOPE_API_KEY not configured')
+      return { code: -1, msg: 'AI 服务未配置' }
+    }
+
+    const candidates = Array.isArray(payload.candidates) ? payload.candidates.slice(0, 3) : []
+    if (candidates.length < 1) {
+      return { code: -1, msg: '缺少候选菜品' }
+    }
+
+    const prompt = this._buildPickPrompt({
+      ...payload,
+      candidates
+    })
+
+    try {
+      const res = await uniCloud.httpclient.request(DASHSCOPE_URL, {
+        method: 'POST',
+        dataType: 'json',
+        contentType: 'json',
+        headers: {
+          'Authorization': `Bearer ${DASHSCOPE_API_KEY}`,
+          'Content-Type': 'application/json'
+        },
+        data: {
+          model: 'qwen-turbo',
+          input: {
+            messages: [
+              {
+                role: 'system',
+                content: '你是一个懂 MBTI 和星座的美食推荐助手。你只能从用户给出的候选菜品里选择，必须返回纯 JSON，不要输出其他文字。'
+              },
+              {
+                role: 'user',
+                content: prompt
+              }
+            ]
+          },
+          parameters: {
+            temperature: 0.7,
+            top_p: 0.9,
+            max_tokens: 120,
+            result_format: 'message'
+          }
+        },
+        timeout: 5000
+      })
+
+      const content = (((res.data || {}).output || {}).choices || [])[0]?.message?.content || ''
+      const parsed = this._parsePickResult(content)
+      if (!parsed) {
+        return { code: -1, msg: 'AI 返回格式错误' }
+      }
+
+      const choice = Math.max(0, Math.min(Number(parsed.choice) || 0, candidates.length - 1))
+      const reason = String(parsed.reason || '').trim().slice(0, 80)
+      if (!reason) {
+        return { code: -1, msg: 'AI 推荐理由为空' }
+      }
+
+      this._recordDailyPick(openid)
+      return { code: 0, choice, reason }
+    } catch (err) {
+      console.warn('[co-ai] pickDishFromCandidates error', err.message || err)
       return { code: -1, msg: 'AI 服务暂时不可用' }
     }
   },
@@ -229,7 +323,7 @@ module.exports = {
    * 限流检查
    * @private
    */
-  _checkRateLimit(openid) {
+  _checkRateLimit(openid, max = RATE_LIMIT_MAX) {
     if (!openid) return true
 
     const now = Date.now()
@@ -240,11 +334,78 @@ module.exports = {
     // 清理过期记录
     userCallLog[openid] = userCallLog[openid].filter((ts) => now - ts < RATE_LIMIT_WINDOW)
 
-    if (userCallLog[openid].length >= RATE_LIMIT_MAX) {
+    if (userCallLog[openid].length >= max) {
       return false
     }
 
     userCallLog[openid].push(now)
     return true
+  },
+
+  async _verifyToken(token) {
+    if (!token) return ''
+    const { data } = await usersCollection.where({ token }).limit(1).get()
+    return data.length ? data[0].openid : ''
+  },
+
+  _getDateKey() {
+    const now = new Date()
+    const year = now.getFullYear()
+    const month = `${now.getMonth() + 1}`.padStart(2, '0')
+    const date = `${now.getDate()}`.padStart(2, '0')
+    return `${year}-${month}-${date}`
+  },
+
+  _checkDailyPickLimit(openid) {
+    const dateKey = this._getDateKey()
+    const record = userDailyPickLog[openid]
+    if (!record || record.dateKey !== dateKey) {
+      userDailyPickLog[openid] = { dateKey, count: 0 }
+      return true
+    }
+    return record.count < DAILY_PICK_LIMIT_MAX
+  },
+
+  _recordDailyPick(openid) {
+    const dateKey = this._getDateKey()
+    const record = userDailyPickLog[openid]
+    if (!record || record.dateKey !== dateKey) {
+      userDailyPickLog[openid] = { dateKey, count: 1 }
+      return
+    }
+    record.count += 1
+  },
+
+  _buildPickPrompt(payload) {
+    const candidatesText = payload.candidates.map((item, index) => {
+      const where = item.canteen || item.canteenName || item.stallName || '普通版'
+      return `${index}. ${where} · ${item.name || ''} —— ${item.vibe || item.category || '顺口'}`
+    }).join('\n')
+
+    return [
+      `用户画像：MBTI ${payload.mbti || 'ENFJ'}，星座 ${payload.zodiac || '白羊座'}。`,
+      `当前模式：${payload.mode || 'normal'}。`,
+      `今日状态：食欲 ${payload.appetite || '适中'}，能量 ${payload.energy || '平稳'}，运势 ${payload.luck || '小吉'}。`,
+      '候选菜品：',
+      candidatesText,
+      '请从候选菜品里选出今天最合适的一个。',
+      '只返回 JSON，格式：{"choice":0,"reason":"40字左右，像朋友聊天的推荐理由"}'
+    ].join('\n')
+  },
+
+  _parsePickResult(content) {
+    if (!content) return null
+    const text = String(content).trim()
+    try {
+      return JSON.parse(text)
+    } catch (error) {
+      const match = text.match(/\{[\s\S]*\}/)
+      if (!match) return null
+      try {
+        return JSON.parse(match[0])
+      } catch {
+        return null
+      }
+    }
   }
 }

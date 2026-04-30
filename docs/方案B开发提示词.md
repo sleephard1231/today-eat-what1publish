@@ -1,292 +1,212 @@
-# 开发任务：接入后台菜品库 + AI 二选一推荐（方案 B）
+# 方案 B：后台食物池 + AI 三选一推荐
 
-## 项目背景
+## 结论
 
-- 项目类型：uni-app + Vue 3 微信小程序
-- 后端：uniCloud（阿里云服务空间）
-- 产品："今天吃什么"美食推荐小程序，基于 MBTI + 星座做个性化推荐
-- 现有云对象：`co-user`（用户）、`co-campus`（校园）、`co-content`（内容安全）、`co-ai`（通义千问 AI）
-- 前端适配层：`utils/cloud.js`
-- 状态管理：`utils/app-state.js`（本地存储 + 云端同步）
+采用方案 B，但按当前项目结构调整为：
 
-## 现状说明
+- 普通版食物池独立维护：`eat-what-normal-dishes`
+- 校园版食物池复用现有饭堂数据：`eat-what-canteens` + `eat-what-stalls` + `eat-what-dishes`
+- AI 不直接生成菜品，只从前端抽出的 3 个候选里选择 1 个，并生成推荐理由
+- 前端先展示模板结果，AI 成功后再平滑替换，AI 失败不影响用户体验
 
-当前食物池完全硬编码在前端 `common/data.js` 中：
-- `genericFoods`：普通版只有 10 道虚构菜品
-- `presetCampuses[0].specialties`：校园版只有 4 道招牌菜
-- `drawMealResult()` 是同步函数，直接从池中随机抽 1 道菜返回
-- AI 仅用于生成推荐理由文案（`aiGenerateReasonForMeal`），不参与选菜
+## 数据关系
 
-## 目标
+### 普通版
 
-把食物池迁移到 uniCloud 数据库后台管理，同时升级为**方案 B**的 AI 推荐逻辑：
+普通版不属于任何学校、饭堂或档口，单独建表：
 
-> 前端从食物池随机抽 3 个候选 → 立即展示第 1 个 + 模板理由 → 后台异步调 AI → AI 从 3 个里挑出最适合的并写推荐理由 → 如果 AI 选了另一个，平滑替换菜品和理由
+`eat-what-normal-dishes`
 
-## 一、数据库设计
-
-### 集合 1：`eat-what-dishes`（菜品库）
+字段：
 
 ```json
 {
-  "_id": "自动生成",
-  "name": "番茄肥牛米线",        // 菜名
-  "vibe": "热乎又治愈",          // 氛围词，用于 UI 展示
-  "category": "粉面",            // 分类：粉面/米饭/轻食/小吃/甜品/饮品
-  "tags": ["汤类", "牛肉"],      // 标签数组
-  "mode": "campus",              // normal（普通版） | campus（校园版）
-  "campusId": "gzcc",            // 校园版必填，关联学校
-  "canteenId": "gzcc-tongde",    // 校园版必填，关联饭堂
-  "stallName": "重庆小面档口",    // 校园版：具体档口名
-  "isActive": true,              // 上架/下架
-  "sortOrder": 1,
-  "createdAt": "时间戳"
-}
-```
-
-**普通版菜品示例**：
-```json
-{
-  "name": "韩式石锅拌饭",
-  "vibe": "热闹满满",
+  "_id": "auto",
+  "name": "韩式拌饭",
   "category": "米饭",
-  "mode": "normal",
-  "campusId": "",
-  "canteenId": "",
-  "stallName": "",
-  "isActive": true
+  "price": "",
+  "vibe": "热闹又满足",
+  "tag": "人气",
+  "sort": 0,
+  "status": "active",
+  "createdAt": "timestamp",
+  "updatedAt": "timestamp"
 }
 ```
 
-### 集合 2：`eat-what-canteens`（扩展已有饭堂库）
+普通版推荐只从 `status = active` 的普通版菜品池里抽取。云端失败或数据为空时，回退到 `common/data.js` 的 `genericFoods`。
 
-```json
+### 校园版
+
+校园版继续使用现有表：
+
+```text
+eat-what-canteens  饭堂
+eat-what-stalls    商铺/档口
+eat-what-dishes    菜品
+```
+
+关系：
+
+```text
+学校 campusName
+↓
+饭堂 canteenId
+↓
+商铺 stallId
+↓
+菜品 dishId
+```
+
+校园版推荐只从用户已选择饭堂里的 `eat-what-dishes.status = active` 菜品中抽取。
+
+## 云对象接口
+
+### `co-campus.getNormalDishCandidates(limit)`
+
+用途：获取普通版可推荐菜品池。
+
+返回统一候选格式：
+
+```js
 {
-  "_id": "gzcc-tongde",
-  "campusId": "gzcc",
-  "name": "同德",
-  "remark": "饭堂档口区",
-  "stalls": ["重庆小面档口", "烧腊档", "快餐窗口"]
+  id,
+  name,
+  category,
+  price,
+  vibe,
+  tag,
+  source: 'normal'
 }
 ```
 
-## 二、云对象扩展
+### `co-campus.getCampusDishCandidates(canteenIds, limit)`
 
-在 `uniCloud-aliyun/cloudfunctions/co-campus/index.obj.js` 中新增以下方法：
+用途：获取校园版可推荐菜品池。
 
-### 1. `getMenuByCanteen(campusId, canteenId)`
-- 查询 `eat-what-dishes` 集合
-- 条件：`mode: 'campus'`, `campusId`, `canteenId`, `isActive: true`
-- 返回菜品数组
-
-### 2. `getNormalDishes()`
-- 查询 `eat-what-dishes` 集合
-- 条件：`mode: 'normal'`, `isActive: true`
-- 返回普通版菜品数组
-
-### 3. `getCanteensByCampus(campusName)`（已有，可复用）
-
-## 三、前端适配层扩展
-
-在 `utils/cloud.js` 中新增：
+参数：
 
 ```js
-// 获取指定饭堂的菜品列表（校园版）
-export async function getCampusMenu(campusId, canteenId) {
-  // 调用 co-campus.getMenuByCanteen()
-  // 失败返回空数组，不抛异常
-}
-
-// 获取普通版菜品列表
-export async function getNormalMenu() {
-  // 调用 co-campus.getNormalDishes()
-  // 失败返回空数组
-}
-```
-
-## 四、核心逻辑改造
-
-### 4.1 `utils/app-state.js` 改造要点
-
-#### 新增云端菜品缓存
-```js
-let cloudMenuCache = {
-  normal: null,        // { fetchedAt: timestamp, data: [] }
-  campus: {}           // { 'campusId:canteenId': { fetchedAt, data } }
-}
-const MENU_CACHE_TTL = 1000 * 60 * 5  // 5分钟缓存
-```
-
-#### 新增 `fetchNormalFoodPool()`
-- 优先从云端获取普通版菜品
-- 命中缓存则直接返回
-- 云端失败回退到本地 `genericFoods`
-
-#### 新增 `fetchCampusFoodPool(campusId, canteenId)`
-- 优先从云端获取指定饭堂菜品
-- 命中缓存则直接返回
-- 云端失败回退到本地 `buildCampusFoods()`
-
-#### 改造 `drawMealResult()` → `drawMealResultAsync()`
-- 从**同步**改为**异步**
-- 根据 `state.mode` 获取对应食物池（优先云端）
-- **普通版**：调 `fetchNormalFoodPool()`
-- **校园版**：获取用户选中的饭堂列表，对每个饭堂调 `fetchCampusFoodPool()`，合并结果
-- 从食物池中随机抽 **3 个不重复候选**
-- 返回 `{ exhausted, state, candidates }`（注意不是直接返回 result）
-
-#### 校园版候选分散策略
-- 抽 3 个候选时，尽量让它们来自不同饭堂
-- 避免 3 个都在同一家饭堂的情况
-
-#### 新增 `aiPickFromCandidates({ candidates, state, fortune })`
-- 构造 Prompt，传给 `co-ai`
-- Prompt 包含：用户 MBTI、星座、今日运势、3 个候选的完整信息
-- 要求 AI 返回 JSON 格式：`{ choice: 0|1|2, reason: "..." }`
-- AI 调用失败则返回 `{ choice: 0, reason: buildReason(...), isAI: false }`
-
-#### 保留 `buildReason()` 作为模板兜底
-
-### 4.2 `pages/index/index.vue` 改造要点
-
-#### 改造 `handleDrawMeal()`
-
-**当前逻辑**：
-```js
-function handleDrawMeal() {
-  const drawResult = drawMealResult()  // 同步
-  popupResult.value = drawResult.result
-  // ...
-}
-```
-
-**目标逻辑**：
-```js
-async function handleDrawMeal() {
-  // 1. 异步抽 3 个候选
-  const { candidates, state: newState } = await drawMealResultAsync()
-  
-  // 2. 立即展示第 1 个候选 + 模板理由（用户无等待）
-  popupResult.value = buildResultFromCandidate(candidates[0])
-  isDrawing.value = true
-  
-  // 3. 动效结束后展示弹窗
-  setTimeout(() => {
-    isDrawing.value = false
-    showResultPopup.value = true
-  }, 1500)
-  
-  // 4. 后台异步调 AI
-  const aiPick = await aiPickFromCandidates({
-    candidates,
-    state: newState,
-    fortune: fortune.value
-  })
-  
-  // 5. 根据 AI 结果更新展示
-  if (aiPick.choice !== 0 && aiPick.isAI) {
-    // AI 选了另一个候选，平滑替换
-    const chosen = candidates[aiPick.choice]
-    popupResult.value = {
-      ...popupResult.value,
-      mealName: chosen.name,
-      vibe: chosen.vibe,
-      canteen: chosen.canteen,
-      reason: aiPick.reason
-    }
-  } else if (aiPick.isAI) {
-    // AI 同意第 1 个，只替换理由
-    popupResult.value = {
-      ...popupResult.value,
-      reason: aiPick.reason
-    }
-  }
-}
-```
-
-#### AI 替换时的 UI 处理
-- 如果 AI 换了菜品：加一个轻量过渡动效（如 200ms 淡入）
-- 如果 AI 只换了理由：理由文本直接替换，不需要动效
-- 用户感知应该是"文案变聪明了"或"AI 帮我挑了更合适的"，而不是突兀跳动
-
-## 五、AI Prompt 设计
-
-### 输入参数
-```json
 {
-  "mbti": "ENFJ",
-  "zodiac": "白羊座",
-  "mode": "campus",
-  "appetite": "旺盛",
-  "energy": "充沛",
-  "luck": "小吉",
-  "candidates": [
-    { "index": 0, "name": "番茄肥牛米线", "vibe": "热乎又治愈", "canteen": "同德" },
-    { "index": 1, "name": "黑椒牛柳意面", "vibe": "松弛感在线", "canteen": "云山食堂" },
-    { "index": 2, "name": "芝士鸡排焗饭", "vibe": "香浓又有仪式感", "canteen": "同心" }
+  canteenIds: ['gzcc-tongde', 'gzcc-xingfu'],
+  limit: 80
+}
+```
+
+返回统一候选格式：
+
+```js
+{
+  id,
+  name,
+  category,
+  price,
+  vibe,
+  tag,
+  source: 'campus',
+  canteenId,
+  canteenName,
+  stallId,
+  stallName
+}
+```
+
+### `co-ai.pickDishFromCandidates(token, payload)`
+
+用途：AI 从 3 个候选里选 1 个，并生成理由。
+
+输入：
+
+```js
+{
+  mbti: 'ENFJ',
+  zodiac: '白羊座',
+  mode: 'campus',
+  appetite: '旺盛',
+  energy: '充沛',
+  luck: '小吉',
+  candidates: [
+    { name: '猪脚饭', vibe: '扎实顶饱', category: '快餐', price: '14', canteen: '同德' },
+    { name: '云吞面', vibe: '热乎清爽', category: '粉面', price: '12', canteen: '同德' },
+    { name: '烧腊饭', vibe: '香口满足', category: '烧腊', price: '16', canteen: '幸福' }
   ]
 }
 ```
 
-### Prompt 模板
-```
-你是一位懂 MBTI 和星座的美食推荐助手。
+输出：
 
-用户画像：
-- MBTI：{mbti}
-- 星座：{zodiac}
-- 今日状态：食欲{appetite}、能量{energy}、运势{luck}
-
-候选菜品（3选1）：
-{candidates[0].index}. {candidates[0].canteen} · {candidates[0].name} —— {candidates[0].vibe}
-{candidates[1].index}. {candidates[1].canteen} · {candidates[1].name} —— {candidates[1].vibe}
-{candidates[2].index}. {candidates[2].canteen} · {candidates[2].name} —— {candidates[2].vibe}
-
-请结合用户画像，从3个候选里挑出最适合今天的一个。
-必须返回以下JSON格式，不要加其他内容：
-{"choice": 0, "reason": "40字左右的推荐理由，语气像朋友在聊天"}
+```js
+{
+  code: 0,
+  choice: 1,
+  reason: '今天状态适合吃点热乎的，云吞面轻松又不压胃。'
+}
 ```
 
-## 六、降级策略（重要）
+安全要求：
 
-| 场景 | 处理 | 用户感知 |
-|------|------|---------|
-| 云端菜品获取成功 | 使用云端菜品 | 正常 |
-| 云端菜品为空 | 回退本地 `genericFoods` / `specialties` | 正常 |
-| 云端菜品获取失败 | 回退本地，console.warn | 正常 |
-| AI 调用成功，选了第1个 | 只替换理由 | "理由写得更好" |
-| AI 调用成功，选了第2/3个 | 平滑切换菜品+理由 | "AI 帮我换了更好的" |
-| AI 调用失败 | 保持第1个 + 模板理由 | 完全无感知 |
-| AI 返回格式错误 | 同上 | 完全无感知 |
+- 必须传 token，未登录不调 AI
+- `candidates` 最多 3 个
+- 每个用户每分钟最多 2 次
+- 每个用户每天最多 5 次
+- AI 超时后前端保持模板结果
+- AI 返回非 JSON 或 choice 越界时降级
 
-## 七、文件改动清单
+## 前端推荐流程
 
-### 后端（uniCloud）
-1. `uniCloud-aliyun/database/eat-what-dishes.schema.json` — 新增数据库 schema
-2. `uniCloud-aliyun/cloudfunctions/co-campus/index.obj.js` — 新增 `getMenuByCanteen`、`getNormalDishes`
+```text
+用户点击“吃什么”
+↓
+根据当前模式获取食物池
+↓
+随机抽 3 个候选
+↓
+立即展示第 1 个 + 模板理由
+↓
+后台异步调用 co-ai.pickDishFromCandidates
+↓
+AI 成功：
+  choice = 0：只替换理由
+  choice = 1/2：平滑替换菜品和理由
+AI 失败：
+  保持原结果
+```
 
-### 前端
-3. `utils/cloud.js` — 新增 `getCampusMenu()`、`getNormalMenu()`
-4. `utils/app-state.js` — 
-   - 新增云端菜品缓存
-   - 新增 `fetchNormalFoodPool()`、`fetchCampusFoodPool()`
-   - 改造 `drawMealResult()` → `drawMealResultAsync()`
-   - 新增 `aiPickFromCandidates()`
-5. `pages/index/index.vue` — 改造 `handleDrawMeal()` 支持异步 + AI 替换
-6. `common/data.js` — 保留 `genericFoods` 作为最终兜底
+## 后台管理
 
-## 八、初始化数据
+uni-admin 后台需要支持：
 
-开发完成后，需要把现有的本地菜品数据导入数据库：
+- 校园版：继续通过“商铺&菜品管理”维护饭堂菜品
+- 普通版：新增“普通版菜品池”页面，管理 `eat-what-normal-dishes`
+- 后续可加“AI 设置”页面，用于配置 AI 开关、每日额度、模型和 prompt 风格
 
-- `genericFoods`（10 道）→ 以 `mode: 'normal'` 导入
-- `presetCampuses[0].specialties`（4 道）→ 以 `mode: 'campus'`、`campusId: 'gzcc'` 导入，绑定到对应饭堂
+API Key 不放前端，不建议在后台明文展示。优先放云对象配置或 uniCloud 安全配置。
 
-## 九、约束条件
+## 降级策略
 
-1. **命名规范**：变量用 camelCase，常量用 UPPER_SNAKE_CASE
-2. **错误处理**：云端失败必须 soft fail，用 `console.warn`，不要弹窗阻塞用户
-3. **缓存策略**：菜品缓存 5 分钟，避免频繁请求
-4. **不要阻塞 UI**：`drawMealResultAsync()` 可以异步，但用户看到的弹窗必须在 1.5 秒内出现
-5. **主题色**：普通版保持暖橙，校园版保持薄荷绿
-6. **文案语气**：轻松、像朋友聊天，不要像后台系统
+| 场景 | 处理 |
+| --- | --- |
+| 普通版云端菜品为空 | 回退 `genericFoods` |
+| 校园版云端菜品为空 | 回退本地校园特色菜 + `genericFoods` |
+| AI 未配置 | 保持模板理由 |
+| AI 调用失败 | 保持模板理由 |
+| AI 返回格式错误 | 保持模板理由 |
+| 用户未登录 | 不调 AI，只用模板理由 |
+
+## 实施文件
+
+主项目：
+
+- `uniCloud-aliyun/database/eat-what-normal-dishes.schema.json`
+- `uniCloud-aliyun/cloudfunctions/co-campus/index.obj.js`
+- `uniCloud-aliyun/cloudfunctions/co-ai/index.obj.js`
+- `utils/cloud.js`
+- `utils/app-state.js`
+- `pages/index/index.vue`
+
+admin 项目：
+
+- `pages/eat-what/normal-dish/list.vue`
+- `pages/eat-what/normal-dish/add.vue`
+- `pages/eat-what/normal-dish/edit.vue`
+- `pages.json`

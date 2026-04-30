@@ -18,7 +18,10 @@ import {
   cloudGetApprovedCampuses,
   cloudSubmitApplication,
   cloudCheckText,
-  aiGenerateReason
+  aiGenerateReason,
+  cloudGetNormalDishCandidates,
+  cloudGetCampusDishCandidates,
+  aiPickDishFromCandidates
 } from '@/utils/cloud.js'
 import { isCloudUser, getUser } from '@/utils/user-state.js'
 
@@ -192,6 +195,65 @@ function buildCampusFoods(currentCampus, fallbackCanteenName) {
     vibe: `${currentCampus.shortName} 同学都爱的热门款`,
     canteen: fallbackCanteenName || '默认全校饭堂'
   }))
+}
+
+function normalizeFoodCandidate(item = {}, fallback = {}) {
+  return {
+    id: item.id || item._id || `food-${item.name || Date.now()}`,
+    name: item.name || '',
+    vibe: item.vibe || item.category || '今天顺口',
+    category: item.category || '',
+    tag: item.tag || '',
+    price: item.price || '',
+    canteen: item.canteen || item.canteenName || fallback.canteen || '',
+    canteenId: item.canteenId || fallback.canteenId || '',
+    stallId: item.stallId || '',
+    stallName: item.stallName || '',
+    source: item.source || fallback.source || 'local'
+  }
+}
+
+function buildResultFromCandidate({ state, candidate, seed, selectedCanteenNames }) {
+  const currentCampus = getCampusById(state.campusId)
+  const canteen = state.mode === 'campus' ? (candidate.canteen || '默认全校饭堂') : ''
+  return {
+    id: `meal-${Date.now()}`,
+    mealName: candidate.name,
+    vibe: candidate.vibe,
+    canteen,
+    campusName: state.mode === 'campus' ? currentCampus.name : '普通版推荐',
+    mode: state.mode,
+    source: candidate.source || '',
+    dishId: candidate.id || '',
+    stallId: candidate.stallId || '',
+    stallName: candidate.stallName || '',
+    category: candidate.category || '',
+    price: candidate.price || '',
+    reason: buildReason({
+      state,
+      pickedFood: {
+        ...candidate,
+        canteen
+      },
+      selectedCanteenNames,
+      seed
+    }),
+    createdAt: formatTimeLabel()
+  }
+}
+
+function pickUniqueCandidates(pool, seed, count = 3) {
+  const source = [...pool].filter((item) => item && item.name)
+  const picked = []
+  let cursor = seed % Math.max(source.length, 1)
+
+  while (source.length && picked.length < count) {
+    const index = cursor % source.length
+    picked.push(source.splice(index, 1)[0])
+    cursor += 7
+  }
+
+  return picked
 }
 
 function buildReason({ state, pickedFood, selectedCanteenNames, seed }) {
@@ -607,6 +669,187 @@ export function getCanteenListByCampusName(campusName) {
 
 // ====== 云端档口缓存 ======
 let cloudStallsCache = {} // { canteenId: [{ id, name, category, remark, dishes }] }
+let cloudMenuCache = {
+  normal: null,
+  campus: {}
+}
+const MENU_CACHE_TTL = 1000 * 60 * 5
+
+function isMenuCacheFresh(cache) {
+  return cache && Date.now() - cache.fetchedAt < MENU_CACHE_TTL
+}
+
+export async function fetchNormalFoodPool(forceRefresh = false) {
+  if (!forceRefresh && isMenuCacheFresh(cloudMenuCache.normal)) {
+    return cloudMenuCache.normal.data
+  }
+
+  try {
+    const res = await cloudGetNormalDishCandidates(120)
+    if (res.code === 0 && Array.isArray(res.data) && res.data.length) {
+      const data = res.data.map((item) => normalizeFoodCandidate(item, { source: 'normal' }))
+      cloudMenuCache.normal = { fetchedAt: Date.now(), data }
+      return data
+    }
+  } catch (err) {
+    console.warn('[app-state] fetchNormalFoodPool error', err?.message)
+  }
+
+  return genericFoods.map((item) => normalizeFoodCandidate(item, { source: 'local-normal' }))
+}
+
+export async function fetchCampusFoodPool(state, forceRefresh = false) {
+  const currentCampus = getCampusById(state.campusId)
+  const selectedCanteens = getSelectedCanteen(state.campusId)
+  const fallbackCanteens = getCanteenListByCampusName(currentCampus.name)
+  const canteens = selectedCanteens.length ? selectedCanteens : fallbackCanteens
+  const canteenIds = canteens.map((item) => item.id).filter(Boolean)
+  const cacheKey = canteenIds.join('|') || currentCampus.id
+
+  if (!forceRefresh && isMenuCacheFresh(cloudMenuCache.campus[cacheKey])) {
+    return cloudMenuCache.campus[cacheKey].data
+  }
+
+  if (canteenIds.length) {
+    try {
+      const res = await cloudGetCampusDishCandidates(canteenIds, 180)
+      if (res.code === 0 && Array.isArray(res.data) && res.data.length) {
+        const data = res.data.map((item) => normalizeFoodCandidate(item, { source: 'campus' }))
+        cloudMenuCache.campus[cacheKey] = { fetchedAt: Date.now(), data }
+        return data
+      }
+    } catch (err) {
+      console.warn('[app-state] fetchCampusFoodPool error', err?.message)
+    }
+  }
+
+  const selectedCanteenNames = canteens.map((item) => item.name).filter(Boolean)
+  const fallbackCanteenName = selectedCanteenNames[0] || '默认全校饭堂'
+  return [...buildCampusFoods(currentCampus, fallbackCanteenName), ...genericFoods].map((item, index) => (
+    normalizeFoodCandidate(item, {
+      source: 'local-campus',
+      canteen: item.canteen || selectedCanteenNames[index % Math.max(selectedCanteenNames.length, 1)] || fallbackCanteenName
+    })
+  ))
+}
+
+export async function drawMealResultAsync() {
+  const state = ensureAppState()
+
+  if (state.daily.remaining <= 0) {
+    return {
+      exhausted: true,
+      state,
+      result: state.daily.lastResult,
+      candidates: []
+    }
+  }
+
+  const pool = state.mode === 'campus'
+    ? await fetchCampusFoodPool(state)
+    : await fetchNormalFoodPool()
+  const safePool = pool.length ? pool : genericFoods.map((item) => normalizeFoodCandidate(item, { source: 'local-normal' }))
+  const seed = createSeed(`${state.profile.mbti}-${state.profile.zodiac}-${state.mode}-${state.daily.remaining}-${Date.now()}`)
+  const candidates = pickUniqueCandidates(safePool, seed, 3)
+  const selectedCanteenNames = getSelectedCanteen(state.campusId).map((item) => item.name)
+  const result = buildResultFromCandidate({
+    state,
+    candidate: candidates[0],
+    seed,
+    selectedCanteenNames
+  })
+
+  const nextState = saveAppState({
+    daily: {
+      dateKey: getTodayKey(),
+      remaining: state.daily.remaining - 1,
+      lastResult: result
+    },
+    stats: {
+      servedCount: state.stats.servedCount + 1
+    }
+  })
+
+  const nextHistory = [result, ...getHistoryList()].slice(0, 30)
+  saveHistoryList(nextHistory)
+
+  return {
+    exhausted: false,
+    state: nextState,
+    result,
+    candidates,
+    seed,
+    selectedCanteenNames
+  }
+}
+
+export async function aiPickFromCandidates({ candidates = [], state, fortune, seed = Date.now(), selectedCanteenNames = [] } = {}) {
+  const fallbackCandidate = candidates[0]
+  if (!fallbackCandidate) {
+    return { choice: 0, reason: '', isAI: false }
+  }
+
+  const fallbackReason = buildReason({
+    state,
+    pickedFood: fallbackCandidate,
+    selectedCanteenNames,
+    seed
+  })
+
+  if (!isCloudUser()) {
+    return { choice: 0, reason: fallbackReason, isAI: false }
+  }
+
+  try {
+    const res = await aiPickDishFromCandidates({
+      mbti: state.profile?.mbti || 'ENFJ',
+      zodiac: state.profile?.zodiac || '白羊座',
+      mode: state.mode || 'normal',
+      appetite: fortune?.appetite || '',
+      energy: fortune?.energy || '',
+      luck: fortune?.luck || '',
+      candidates: candidates.slice(0, 3).map((item) => ({
+        name: item.name,
+        vibe: item.vibe,
+        category: item.category,
+        price: item.price,
+        canteen: item.canteen,
+        stallName: item.stallName
+      }))
+    })
+    if (res.code === 0 && Number.isInteger(res.choice) && res.reason) {
+      return {
+        choice: Math.max(0, Math.min(res.choice, candidates.length - 1)),
+        reason: res.reason,
+        isAI: true
+      }
+    }
+  } catch (err) {
+    console.warn('[app-state] aiPickFromCandidates error', err?.message)
+  }
+
+  return { choice: 0, reason: fallbackReason, isAI: false }
+}
+
+export function updateLatestMealResult(result) {
+  if (!result?.id) return
+
+  const current = ensureAppState()
+  if (current.daily?.lastResult?.id === result.id) {
+    saveAppState({
+      daily: {
+        ...current.daily,
+        lastResult: result
+      }
+    })
+  }
+
+  const history = getHistoryList()
+  const nextHistory = history.map((item) => (
+    item.id === result.id ? { ...item, ...result } : item
+  ))
+  saveHistoryList(nextHistory)
+}
 
 /**
  * 从云端获取指定饭堂的档口列表（含菜品）

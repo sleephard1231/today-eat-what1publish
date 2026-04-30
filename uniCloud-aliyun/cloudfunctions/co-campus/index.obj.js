@@ -16,6 +16,7 @@ const campusesCollection = db.collection('eat-what-campuses')
 const canteensCollection = db.collection('eat-what-canteens')
 const stallsCollection = db.collection('eat-what-stalls')
 const dishesCollection = db.collection('eat-what-dishes')
+const normalDishesCollection = db.collection('eat-what-normal-dishes')
 const servicesCollection = db.collection('eat-what-services')
 
 // 引入 co-user 的 token 验证
@@ -253,6 +254,105 @@ module.exports = {
         remark: s.remark || '',
         dishes: dishesByStall[s._id] || []
       }))
+    }
+  },
+
+  /**
+   * 获取普通版推荐候选菜品
+   * @param {number} limit - 最多返回数量
+   * @returns {{ code: number, data?: Array, msg?: string }}
+   */
+  async getNormalDishCandidates(limit = 80) {
+    const safeLimit = Math.max(1, Math.min(Number(limit) || 80, 200))
+    const { data: dishes } = await normalDishesCollection
+      .where({ status: 'active' })
+      .orderBy('sort', 'asc')
+      .limit(safeLimit)
+      .get()
+
+    return {
+      code: 0,
+      data: dishes.map((dish) => ({
+        id: dish._id,
+        name: dish.name,
+        category: dish.category || '',
+        tag: dish.tag || '',
+        price: dish.price || '',
+        vibe: dish.vibe || '',
+        source: 'normal'
+      }))
+    }
+  },
+
+  /**
+   * 获取校园版推荐候选菜品
+   * @param {Array<string>} canteenIds - 饭堂ID列表
+   * @param {number} limit - 最多返回数量
+   * @returns {{ code: number, data?: Array, msg?: string }}
+   */
+  async getCampusDishCandidates(canteenIds = [], limit = 120) {
+    const ids = Array.isArray(canteenIds)
+      ? [...new Set(canteenIds.filter(Boolean))].slice(0, 20)
+      : []
+
+    if (!ids.length) {
+      return { code: 0, data: [] }
+    }
+
+    const safeLimit = Math.max(1, Math.min(Number(limit) || 120, 300))
+
+    const { data: canteens } = await canteensCollection
+      .where({ _id: db.command.in(ids), status: 'active' })
+      .get()
+    const canteenMap = {}
+    canteens.forEach((canteen) => {
+      canteenMap[canteen._id] = canteen.name
+    })
+
+    const { data: stalls } = await stallsCollection
+      .where({ canteenId: db.command.in(ids), status: 'active' })
+      .get()
+    const stallMap = {}
+    stalls.forEach((stall) => {
+      stallMap[stall._id] = {
+        name: stall.name,
+        canteenId: stall.canteenId
+      }
+    })
+
+    const stallIds = stalls.map((stall) => stall._id)
+    if (!stallIds.length) {
+      return { code: 0, data: [] }
+    }
+
+    const { data: dishes } = await dishesCollection
+      .where({
+        stallId: db.command.in(stallIds),
+        status: 'active'
+      })
+      .orderBy('sort', 'asc')
+      .limit(safeLimit)
+      .get()
+
+    return {
+      code: 0,
+      data: dishes.map((dish) => {
+        const stall = stallMap[dish.stallId] || {}
+        const canteenId = dish.canteenId || stall.canteenId || ''
+        return {
+          id: dish._id,
+          name: dish.name,
+          category: dish.category || '',
+          tag: dish.tag || '',
+          price: dish.price || '',
+          vibe: dish.vibe || '',
+          source: 'campus',
+          canteenId,
+          canteenName: canteenMap[canteenId] || '',
+          stallId: dish.stallId || '',
+          stallName: stall.name || ''
+        }
+      })
     }
   },
 
@@ -799,6 +899,7 @@ module.exports = {
       { menu_id: 'canteen_list', name: '饭堂管理', icon: 'admin-icons-manager-app', url: '/pages/eat-what/canteen/list', sort: 520, parent_id: 'canteen_management', permission: [], enable: true, create_date: Date.now(), _id: 'eat-what-canteen-list' },
       { menu_id: 'stall_list', name: '商铺管理', icon: 'admin-icons-manager-app', url: '/pages/eat-what/stall/list', sort: 530, parent_id: 'canteen_management', permission: [], enable: true, create_date: Date.now(), _id: 'eat-what-stall-list' },
       { menu_id: 'dish_list', name: '菜品管理', icon: 'admin-icons-manager-tag', url: '/pages/eat-what/dish/list', sort: 540, parent_id: 'canteen_management', permission: [], enable: true, create_date: Date.now(), _id: 'eat-what-dish-list' },
+      { menu_id: 'normal_dish_list', name: '普通版菜品池', icon: 'admin-icons-manager-tag', url: '/pages/eat-what/normal-dish/list', sort: 545, parent_id: 'canteen_management', permission: [], enable: true, create_date: Date.now(), _id: 'eat-what-normal-dish-list' },
       { menu_id: 'application_management', name: '入驻审核', icon: 'admin-icons-manager-permission', url: '/pages/eat-what/application/list', sort: 550, parent_id: 'canteen_management', permission: [], enable: true, create_date: Date.now(), _id: 'eat-what-application-mgmt' },
       { menu_id: 'service_management', name: '校园服务', icon: 'admin-icons-manager-role', url: '/pages/eat-what/service/list', sort: 560, parent_id: 'canteen_management', permission: [], enable: true, create_date: Date.now(), _id: 'eat-what-service-mgmt' },
       { menu_id: 'user_management', name: '用户管理', icon: 'admin-icons-manager-user', url: '', sort: 600, parent_id: '', permission: [], enable: true, create_date: Date.now(), _id: 'eat-what-user-mgmt' },
@@ -840,6 +941,7 @@ module.exports = {
       'eat-what-canteen-list': '/pages/eat-what/canteen/list',
       'eat-what-stall-list': '/pages/eat-what/stall/list',
       'eat-what-dish-list': '/pages/eat-what/dish/list',
+      'eat-what-normal-dish-list': '/pages/eat-what/normal-dish/list',
       'eat-what-application-mgmt': '/pages/eat-what/application/list',
       'eat-what-service-mgmt': '/pages/eat-what/service/list',
       'eat-what-user-list': '/pages/eat-what/user/list',
@@ -938,6 +1040,7 @@ module.exports = {
       { _id: 'eat-what-canteen-list', name: '饭堂管理', expectedUrl: '/pages/eat-what/canteen/list' },
       { _id: 'eat-what-stall-list', name: '商铺管理', expectedUrl: '/pages/eat-what/stall/list' },
       { _id: 'eat-what-dish-list', name: '菜品管理', expectedUrl: '/pages/eat-what/dish/list' },
+      { _id: 'eat-what-normal-dish-list', name: '普通版菜品池', expectedUrl: '/pages/eat-what/normal-dish/list' },
       { _id: 'eat-what-application-mgmt', name: '入驻审核', expectedUrl: '/pages/eat-what/application/list' },
       { _id: 'eat-what-service-mgmt', name: '校园服务', expectedUrl: '/pages/eat-what/service/list' },
       { _id: 'eat-what-user-mgmt', name: '用户管理(父级)', expectedUrl: '' },

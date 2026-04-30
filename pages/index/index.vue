@@ -149,7 +149,7 @@
 import { computed, ref } from 'vue'
 import { onLoad, onShow, onUnload } from '@dcloudio/uni-app'
 import { appetiteLabels, energyLevelLabels, luckLabels } from '@/common/data.js'
-import { applyTabBarTheme, drawMealResult, getAppState, getCampusById, getTheme, getTodayFortune } from '@/utils/app-state.js'
+import { aiPickFromCandidates, applyTabBarTheme, drawMealResultAsync, getAppState, getCampusById, getTheme, getTodayFortune, updateLatestMealResult } from '@/utils/app-state.js'
 
 const statusBarHeight = uni.getWindowInfo().statusBarHeight || 20
 const state = ref(getAppState())
@@ -296,13 +296,32 @@ function triggerChipBounce(type) {
   }, 420)
 }
 
-function handleDrawMeal() {
+function applyAiPick(aiPick, candidates) {
+  if (!aiPick?.isAI || !popupResult.value) return
+  const chosen = candidates[aiPick.choice] || candidates[0]
+  popupResult.value = {
+    ...popupResult.value,
+    mealName: chosen.name,
+    vibe: chosen.vibe,
+    canteen: popupResult.value.mode === 'campus' ? (chosen.canteen || popupResult.value.canteen) : '',
+    source: chosen.source || popupResult.value.source,
+    dishId: chosen.id || popupResult.value.dishId,
+    stallId: chosen.stallId || popupResult.value.stallId,
+    stallName: chosen.stallName || popupResult.value.stallName,
+    category: chosen.category || popupResult.value.category,
+    price: chosen.price || popupResult.value.price,
+    reason: aiPick.reason
+  }
+  updateLatestMealResult(popupResult.value)
+}
+
+async function handleDrawMeal() {
   if (isDrawing.value) return
 
   clearRevealTimers()
   showResultPopup.value = false
 
-  const drawResult = drawMealResult()
+  const drawResult = await drawMealResultAsync()
   state.value = drawResult.state
   applyTabBarTheme(drawResult.state.mode)
   animateFortuneProgress()
@@ -320,6 +339,18 @@ function handleDrawMeal() {
     showResultPopup.value = true
     drawTimer = null
   }, 1500)
+
+  aiPickFromCandidates({
+    candidates: drawResult.candidates,
+    state: drawResult.state,
+    fortune: fortune.value,
+    seed: drawResult.seed,
+    selectedCanteenNames: drawResult.selectedCanteenNames
+  }).then((aiPick) => {
+    applyAiPick(aiPick, drawResult.candidates)
+  }).catch((err) => {
+    console.warn('[index] ai pick failed', err?.message || err)
+  })
 }
 
 function closeResultPopup() {

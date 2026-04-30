@@ -1,0 +1,68 @@
+{
+  "bsonType": "object",
+  "required": ["name"],
+  "permission": {
+    "read": true,
+    "create": false,
+    "update": false,
+    "delete": false
+  },
+  "properties": {
+    "_id": {
+      "description": "普通版菜品ID"
+    },
+    "name": {
+      "bsonType": "string",
+      "description": "菜品名称",
+      "title": "菜品名称"
+    },
+    "category": {
+      "bsonType": "string",
+      "description": "分类",
+      "title": "分类"
+    },
+    "tag": {
+      "bsonType": "string",
+      "description": "标签",
+      "title": "标签"
+    },
+    "price": {
+      "bsonType": "string",
+      "description": "价格文本",
+      "title": "价格"
+    },
+    "vibe": {
+      "bsonType": "string",
+      "description": "氛围词",
+      "title": "氛围"
+    },
+    "sort": {
+      "bsonType": "int",
+      "description": "排序权重",
+      "title": "排序"
+    },
+    "status": {
+      "bsonType": "string",
+      "description": "状态",
+      "enum": ["active", "inactive"],
+      "defaultValue": "active",
+      "title": "状态"
+    },
+    "createdAt": {
+      "bsonType": "timestamp",
+      "description": "创建时间",
+      "title": "创建时间",
+      "defaultValue": {
+        "$env": "now"
+      }
+    },
+    "updatedAt": {
+      "bsonType": "timestamp",
+      "description": "更新时间",
+      "title": "更新时间",
+      "defaultValue": {
+        "$env": "now"
+      }
+    }
+  }
+}

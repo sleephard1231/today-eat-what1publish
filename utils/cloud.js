@@ -398,6 +398,35 @@ export async function cloudIsCampusAdmin() {
   }
 }
 
+/**
+ * 获取普通版推荐候选菜品
+ * @param {number} limit
+ */
+export async function cloudGetNormalDishCandidates(limit = 80) {
+  try {
+    const co = getCoCampus()
+    return await co.getNormalDishCandidates(limit)
+  } catch (err) {
+    console.warn('[cloud] cloudGetNormalDishCandidates error', err)
+    return { code: -1, data: [], msg: '获取普通版菜品池失败' }
+  }
+}
+
+/**
+ * 获取校园版推荐候选菜品
+ * @param {Array<string>} canteenIds
+ * @param {number} limit
+ */
+export async function cloudGetCampusDishCandidates(canteenIds = [], limit = 120) {
+  try {
+    const co = getCoCampus()
+    return await co.getCampusDishCandidates(canteenIds, limit)
+  } catch (err) {
+    console.warn('[cloud] cloudGetCampusDishCandidates error', err)
+    return { code: -1, data: [], msg: '获取校园版菜品池失败' }
+  }
+}
+
 export async function aiGenerateReason(context = {}) {
   try {
     const co = getCoAi()
@@ -405,6 +434,22 @@ export async function aiGenerateReason(context = {}) {
   } catch (err) {
     console.warn('[cloud] aiGenerateReason error', err)
     return { code: -1, msg: 'AI 服务调用失败' }
+  }
+}
+
+/**
+ * AI 从 3 个候选菜品里选择 1 个
+ * @param {object} payload
+ */
+export async function aiPickDishFromCandidates(payload = {}) {
+  try {
+    const token = getStoredUserToken()
+    if (!token) return { code: -1, msg: '请先登录' }
+    const co = getCoAi()
+    return await co.pickDishFromCandidates(token, payload)
+  } catch (err) {
+    console.warn('[cloud] aiPickDishFromCandidates error', err)
+    return { code: -1, msg: 'AI 推荐失败' }
   }
 }
 
