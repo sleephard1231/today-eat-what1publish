@@ -479,6 +479,51 @@ export async function aiGenerateFortuneText(context = {}) {
   }
 }
 
+/**
+ * 读取 AI 推荐配置（管理员）
+ */
+export async function cloudGetAiConfig() {
+  try {
+    const token = getStoredUserToken()
+    if (!token) return { code: -1, msg: '请先使用管理员账号登录' }
+    const co = getCoAi()
+    return await co.getAiConfig(token)
+  } catch (err) {
+    console.warn('[cloud] cloudGetAiConfig error', err)
+    return { code: -1, msg: '读取 AI 配置失败' }
+  }
+}
+
+/**
+ * 更新 AI 推荐配置（管理员）
+ */
+export async function cloudUpdateAiConfig(configData = {}) {
+  try {
+    const token = getStoredUserToken()
+    if (!token) return { code: -1, msg: '请先使用管理员账号登录' }
+    const co = getCoAi()
+    return await co.updateAiConfig(token, configData)
+  } catch (err) {
+    console.warn('[cloud] cloudUpdateAiConfig error', err)
+    return { code: -1, msg: '保存 AI 配置失败' }
+  }
+}
+
+/**
+ * 测试 AI 推荐配置（管理员）
+ */
+export async function cloudTestAiConfig(configData = {}) {
+  try {
+    const token = getStoredUserToken()
+    if (!token) return { code: -1, msg: '请先使用管理员账号登录' }
+    const co = getCoAi()
+    return await co.testAiConfig(token, configData)
+  } catch (err) {
+    console.warn('[cloud] cloudTestAiConfig error', err)
+    return { code: -1, msg: '测试 AI 配置失败' }
+  }
+}
+
 // ====== Admin 菜单管理 ======
 
 /**

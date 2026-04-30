@@ -1,0 +1,85 @@
+{
+  "bsonType": "object",
+  "permission": {
+    "read": false,
+    "create": false,
+    "update": false,
+    "delete": false
+  },
+  "properties": {
+    "_id": {
+      "description": "固定为 default"
+    },
+    "enable": {
+      "bsonType": "bool",
+      "description": "AI 总开关",
+      "title": "AI总开关",
+      "defaultValue": false
+    },
+    "enableNormal": {
+      "bsonType": "bool",
+      "description": "普通版 AI 开关",
+      "title": "普通版AI",
+      "defaultValue": true
+    },
+    "enableCampus": {
+      "bsonType": "bool",
+      "description": "校园版 AI 开关",
+      "title": "校园版AI",
+      "defaultValue": true
+    },
+    "provider": {
+      "bsonType": "string",
+      "description": "AI 服务商",
+      "title": "服务商",
+      "defaultValue": "dashscope"
+    },
+    "model": {
+      "bsonType": "string",
+      "description": "模型名称",
+      "title": "模型",
+      "defaultValue": "qwen-turbo"
+    },
+    "dailyLimit": {
+      "bsonType": "int",
+      "description": "单用户每日 AI 推荐次数上限",
+      "title": "每日上限",
+      "defaultValue": 5
+    },
+    "minuteLimit": {
+      "bsonType": "int",
+      "description": "单用户每分钟 AI 推荐次数上限",
+      "title": "每分钟上限",
+      "defaultValue": 2
+    },
+    "promptStyle": {
+      "bsonType": "string",
+      "description": "推荐文案风格",
+      "title": "文案风格",
+      "defaultValue": "朋友聊天"
+    },
+    "apiKey": {
+      "bsonType": "string",
+      "description": "DashScope API Key，仅云对象读取，后台读取时会掩码",
+      "title": "API Key"
+    },
+    "updatedBy": {
+      "bsonType": "string",
+      "description": "最后更新人"
+    },
+    "createdAt": {
+      "bsonType": "timestamp",
+      "description": "创建时间",
+      "defaultValue": {
+        "$env": "now"
+      }
+    },
+    "updatedAt": {
+      "bsonType": "timestamp",
+      "description": "更新时间",
+      "defaultValue": {
+        "$env": "now"
+      }
+    }
+  }
+}
