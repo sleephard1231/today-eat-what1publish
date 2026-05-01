@@ -429,8 +429,10 @@ export async function cloudGetCampusDishCandidates(canteenIds = [], limit = 120)
 
 export async function aiGenerateReason(context = {}) {
   try {
+    const token = getStoredUserToken()
+    if (!token) return { code: -1, msg: '请先登录' }
     const co = getCoAi()
-    return await co.generateReason(context)
+    return await co.generateReason(token, context)
   } catch (err) {
     console.warn('[cloud] aiGenerateReason error', err)
     return { code: -1, msg: 'AI 服务调用失败' }
@@ -458,11 +460,13 @@ export async function aiPickDishFromCandidates(payload = {}) {
  */
 export async function aiBatchGenerateReasons(contexts) {
   try {
+    const token = getStoredUserToken()
+    if (!token) return { code: -1, results: [], errors: Array.isArray(contexts) ? contexts.length : 0, msg: '请先登录' }
     const co = getCoAi()
-    return await co.batchGenerateReasons(contexts)
+    return await co.batchGenerateReasons(token, contexts)
   } catch (err) {
     console.warn('[cloud] aiBatchGenerateReasons error', err)
-    return { code: -1, results: [], errors: contexts.length }
+    return { code: -1, results: [], errors: Array.isArray(contexts) ? contexts.length : 0 }
   }
 }
 
@@ -471,8 +475,10 @@ export async function aiBatchGenerateReasons(contexts) {
  */
 export async function aiGenerateFortuneText(context = {}) {
   try {
+    const token = getStoredUserToken()
+    if (!token) return { code: -1, msg: '请先登录' }
     const co = getCoAi()
-    return await co.generateFortuneText(context)
+    return await co.generateFortuneText(token, context)
   } catch (err) {
     console.warn('[cloud] aiGenerateFortuneText error', err)
     return { code: -1, msg: 'AI 服务失败' }
@@ -531,8 +537,10 @@ export async function cloudTestAiConfig(configData = {}) {
  */
 export async function cloudInitAdminMenus() {
   try {
+    const token = getStoredUserToken()
+    if (!token) return { code: -1, msg: '请先使用管理员账号登录' }
     const co = getCoCampus()
-    return await co.initAdminMenus()
+    return await co.initAdminMenus(token)
   } catch (err) {
     console.warn('[cloud] cloudInitAdminMenus error', err)
     return { code: -1, msg: '初始化菜单失败' }
@@ -544,8 +552,10 @@ export async function cloudInitAdminMenus() {
  */
 export async function cloudFixAdminMenusUrl() {
   try {
+    const token = getStoredUserToken()
+    if (!token) return { code: -1, msg: '请先使用管理员账号登录' }
     const co = getCoCampus()
-    return await co.fixAdminMenusUrl()
+    return await co.fixAdminMenusUrl(token)
   } catch (err) {
     console.warn('[cloud] cloudFixAdminMenusUrl error', err)
     return { code: -1, msg: '修复菜单URL失败' }
@@ -557,8 +567,10 @@ export async function cloudFixAdminMenusUrl() {
  */
 export async function cloudRunDiagnostics() {
   try {
+    const token = getStoredUserToken()
+    if (!token) return { code: -1, msg: '请先使用管理员账号登录' }
     const co = getCoCampus()
-    return await co.runDiagnostics()
+    return await co.runDiagnostics(token)
   } catch (err) {
     console.warn('[cloud] cloudRunDiagnostics error', err)
     return { code: -1, msg: '诊断服务调用失败：' + (err.message || err) }
@@ -570,8 +582,10 @@ export async function cloudRunDiagnostics() {
  */
 export async function cloudInitBaseData() {
   try {
+    const token = getStoredUserToken()
+    if (!token) return { code: -1, msg: '请先使用管理员账号登录' }
     const co = getCoCampus()
-    return await co.initBaseData()
+    return await co.initBaseData(token)
   } catch (err) {
     console.warn('[cloud] cloudInitBaseData error', err)
     return { code: -1, msg: '初始化基础数据失败：' + (err.message || err) }

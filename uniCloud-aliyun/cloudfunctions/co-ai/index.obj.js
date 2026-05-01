@@ -27,6 +27,7 @@ const userCallLog = {} // { openid: [timestamp, ...] }
 const userDailyPickLog = {} // { openid: { dateKey, count } }
 const usersCollection = db.collection('eat-what-users')
 const aiConfigCollection = db.collection('eat-what-ai-config')
+const aiUsageCollection = db.collection('eat-what-ai-usage')
 
 const AI_CONFIG_ID = 'default'
 const CONFIG_CACHE_TTL = 30 * 1000
@@ -131,6 +132,66 @@ function recordDailyPick(openid) {
     return
   }
   record.count += 1
+}
+
+function getUsageId(openid, dateKey = getDateKey()) {
+  const crypto = require('crypto')
+  const hash = crypto.createHash('sha1').update(`${dateKey}:${openid}`).digest('hex')
+  return `${dateKey}_${hash}`
+}
+
+async function getDailyAiUsage(openid, dateKey = getDateKey()) {
+  if (!openid) return { calls: 0, totalTokens: 0 }
+  try {
+    const { data } = await aiUsageCollection.doc(getUsageId(openid, dateKey)).get()
+    return data && data.length ? data[0] : { calls: 0, totalTokens: 0 }
+  } catch (err) {
+    console.warn('[co-ai] get daily usage failed', err.message || err)
+    return { calls: 0, totalTokens: 0 }
+  }
+}
+
+async function ensureDailyAiQuota(openid, limit) {
+  const safeLimit = Math.max(1, Math.min(Number(limit) || DAILY_PICK_LIMIT_MAX, 200))
+  const usage = await getDailyAiUsage(openid)
+  return Number(usage.calls || 0) < safeLimit
+}
+
+async function recordDailyAiUsage(openid, usage = {}) {
+  if (!openid) return null
+  const dateKey = getDateKey()
+  const id = getUsageId(openid, dateKey)
+  const promptTokens = Number(usage.promptTokens || 0)
+  const completionTokens = Number(usage.completionTokens || 0)
+  const totalTokens = Number(usage.totalTokens || (promptTokens + completionTokens) || 0)
+  const current = await getDailyAiUsage(openid, dateKey)
+  const next = {
+    _id: id,
+    openid,
+    dateKey,
+    calls: Number(current.calls || 0) + 1,
+    totalTokens: Number(current.totalTokens || 0) + totalTokens,
+    promptTokens: Number(current.promptTokens || 0) + promptTokens,
+    completionTokens: Number(current.completionTokens || 0) + completionTokens,
+    lastTokens: totalTokens,
+    updatedAt: Date.now()
+  }
+
+  try {
+    if (current._id) {
+      const { _id, ...updateData } = next
+      await aiUsageCollection.doc(id).update(updateData)
+    } else {
+      await aiUsageCollection.add({
+        ...next,
+        createdAt: Date.now()
+      })
+    }
+    return next
+  } catch (err) {
+    console.warn('[co-ai] record daily usage failed', err.message || err)
+    return null
+  }
 }
 
 async function getAiConfig() {
@@ -443,15 +504,21 @@ module.exports = {
    *   }
    * @returns {{ code: number, reason?: string, msg?: string }}
    */
-  async generateReason(context = {}) {
+  async generateReason(token = '', context = {}) {
     const config = await getAiConfig()
     const apiKey = resolveApiKey(config)
+    const openid = await verifyToken(token)
+    if (!openid) {
+      return { code: -1, msg: '请先登录' }
+    }
 
     // 限流检查
-    const clientInfo = this.getClientInfo()
-    const openid = clientInfo.OPENID || ''
-    if (!checkRateLimit(openid)) {
+    if (!checkRateLimit(openid, config.minuteLimit || RATE_LIMIT_MAX)) {
       return { code: -1, msg: '请求太频繁，请稍后再试' }
+    }
+
+    if (!await ensureDailyAiQuota(openid, config.dailyLimit || DAILY_PICK_LIMIT_MAX)) {
+      return { code: -1, msg: '今日 AI 推荐次数已用完' }
     }
 
     if (!config.enable) {
@@ -482,6 +549,7 @@ module.exports = {
       })
 
       if (result.content) {
+        await recordDailyAiUsage(openid, result.usage)
         await recordAiUsage(config, result.usage)
         return { code: 0, reason: result.content }
       }
@@ -528,6 +596,10 @@ module.exports = {
       return { code: -1, msg: '今日 AI 推荐次数已用完' }
     }
 
+    if (!await ensureDailyAiQuota(openid, config.dailyLimit || DAILY_PICK_LIMIT_MAX)) {
+      return { code: -1, msg: '今日 AI 推荐次数已用完' }
+    }
+
     if (!apiKey) {
       console.warn('[co-ai] DASHSCOPE_API_KEY not configured')
       return { code: -1, msg: 'AI 服务未配置' }
@@ -571,6 +643,7 @@ module.exports = {
       }
 
       recordDailyPick(openid)
+      await recordDailyAiUsage(openid, result.usage)
       await recordAiUsage(config, result.usage)
       return { code: 0, choice, reason }
     } catch (err) {
@@ -584,7 +657,12 @@ module.exports = {
    * @param {Array<object>} contexts
    * @returns {{ code: number, results?: Array, errors?: number, msg?: string }}
    */
-  async batchGenerateReasons(contexts) {
+  async batchGenerateReasons(token = '', contexts = []) {
+    const admin = await verifyConfigAdmin(this, token)
+    if (!admin) {
+      return { code: -1, results: [], errors: 0, msg: '无管理权限' }
+    }
+
     if (!Array.isArray(contexts) || !contexts.length) {
       return { code: -1, results: [], errors: 0, msg: '空数组' }
     }
@@ -593,7 +671,7 @@ module.exports = {
     let errors = 0
 
     for (const ctx of contexts.slice(0, 5)) {
-      const res = await this.generateReason(ctx)
+      const res = await this.generateReason(token, ctx)
       if (res.code === 0 && res.reason) {
         results.push({ reason: res.reason, isAI: true })
       } else {
@@ -610,13 +688,20 @@ module.exports = {
    * @param {object} context - { mbti, zodiac, dateLabel }
    * @returns {{ code: number, text?: string, msg?: string }}
    */
-  async generateFortuneText(context = {}) {
+  async generateFortuneText(token = '', context = {}) {
     const config = await getAiConfig()
     const apiKey = resolveApiKey(config)
-    const clientInfo = this.getClientInfo()
-    const openid = clientInfo.OPENID || ''
-    if (!checkRateLimit(openid)) {
+    const openid = await verifyToken(token)
+    if (!openid) {
+      return { code: -1, msg: '请先登录' }
+    }
+
+    if (!checkRateLimit(openid, config.minuteLimit || RATE_LIMIT_MAX)) {
       return { code: -1, msg: '请求太频繁' }
+    }
+
+    if (!await ensureDailyAiQuota(openid, config.dailyLimit || DAILY_PICK_LIMIT_MAX)) {
+      return { code: -1, msg: '今日 AI 推荐次数已用完' }
     }
 
     if (!config.enable) {
@@ -646,6 +731,7 @@ module.exports = {
       })
 
       if (result.content) {
+        await recordDailyAiUsage(openid, result.usage)
         await recordAiUsage(config, result.usage)
         return { code: 0, text: result.content }
       }

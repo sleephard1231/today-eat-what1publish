@@ -1,0 +1,69 @@
+{
+  "bsonType": "object",
+  "required": ["openid", "dateKey"],
+  "permission": {
+    "read": false,
+    "create": false,
+    "update": false,
+    "delete": false
+  },
+  "properties": {
+    "_id": {
+      "description": "dateKey + openid hash"
+    },
+    "openid": {
+      "bsonType": "string",
+      "description": "用户 openid",
+      "title": "openid"
+    },
+    "dateKey": {
+      "bsonType": "string",
+      "description": "日期，格式 YYYY-MM-DD",
+      "title": "日期"
+    },
+    "calls": {
+      "bsonType": "int",
+      "description": "当天 AI 调用次数",
+      "title": "调用次数",
+      "defaultValue": 0
+    },
+    "totalTokens": {
+      "bsonType": "int",
+      "description": "当天累计 token",
+      "title": "累计Token",
+      "defaultValue": 0
+    },
+    "promptTokens": {
+      "bsonType": "int",
+      "description": "当天输入 token",
+      "title": "输入Token",
+      "defaultValue": 0
+    },
+    "completionTokens": {
+      "bsonType": "int",
+      "description": "当天输出 token",
+      "title": "输出Token",
+      "defaultValue": 0
+    },
+    "lastTokens": {
+      "bsonType": "int",
+      "description": "最近一次 token",
+      "title": "最近Token",
+      "defaultValue": 0
+    },
+    "createdAt": {
+      "bsonType": "timestamp",
+      "description": "创建时间",
+      "forceDefaultValue": {
+        "$env": "now"
+      }
+    },
+    "updatedAt": {
+      "bsonType": "timestamp",
+      "description": "更新时间",
+      "forceDefaultValue": {
+        "$env": "now"
+      }
+    }
+  }
+}

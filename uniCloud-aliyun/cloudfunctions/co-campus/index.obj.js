@@ -960,7 +960,12 @@ module.exports = {
    * 一键初始化 admin 自定义菜单（插入到 opendb-admin-menus 表）
    * @returns {{ code: number, msg: string, data?: object }}
    */
-  async initAdminMenus() {
+  async initAdminMenus(token = '') {
+    const openid = await this._verifyAdmin(token)
+    if (!openid) {
+      return { code: -1, msg: '无管理权限' }
+    }
+
     const menusTable = db.collection('opendb-admin-menus')
     const menus = [
       { menu_id: 'canteen_management', name: '饭堂管理', icon: 'admin-icons-fl-xitong', url: '', sort: 500, parent_id: '', permission: [], enable: true, create_date: Date.now(), _id: 'eat-what-canteen-mgmt' },
@@ -1002,7 +1007,12 @@ module.exports = {
    * 用于数据库中已存在旧路径菜单记录的情况
    * @returns {{ code: number, msg: string, data?: object }}
    */
-  async fixAdminMenusUrl() {
+  async fixAdminMenusUrl(token = '') {
+    const openid = await this._verifyAdmin(token)
+    if (!openid) {
+      return { code: -1, msg: '无管理权限' }
+    }
+
     const menusTable = db.collection('opendb-admin-menus')
 
     // 定义正确的 URL 映射（_id -> 正确的新 URL）
@@ -1062,7 +1072,12 @@ module.exports = {
    * 综合诊断：检测前后端连通性、数据库表、菜单配置
    * @returns {{ code: number, data: object, msg: string }}
    */
-  async runDiagnostics() {
+  async runDiagnostics(token = '') {
+    const openid = await this._verifyAdmin(token)
+    if (!openid) {
+      return { code: -1, msg: '无管理权限' }
+    }
+
     const results = {
       timestamp: new Date().toISOString(),
       cloudObject: 'co-campus',
@@ -1161,7 +1176,12 @@ module.exports = {
    * 初始化基础数据（校园、饭堂、服务）—— 将 common/data.js 的预设数据写入数据库
    * @returns {{ code: number, data?: object, msg: string }}
    */
-  async initBaseData() {
+  async initBaseData(token = '') {
+    const openid = await this._verifyAdmin(token)
+    if (!openid) {
+      return { code: -1, msg: '无管理权限' }
+    }
+
     const now = Date.now()
     let campusAdded = 0, campusSkipped = 0
     let canteenAdded = 0, canteenSkipped = 0
