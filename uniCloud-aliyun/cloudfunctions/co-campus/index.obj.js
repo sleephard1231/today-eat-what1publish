@@ -23,6 +23,8 @@ const servicesCollection = db.collection('eat-what-services')
 const usersCollection = db.collection('eat-what-users')
 
 const TOKEN_EXPIRE_MS = 7 * 24 * 60 * 60 * 1000
+const APPLICATION_DAILY_LIMIT = 3
+const APPLICATION_PENDING_LIMIT = 5
 const READ_CACHE_TTL = 60 * 1000
 const readCache = new Map()
 
@@ -48,6 +50,12 @@ function clearReadCache() {
   readCache.clear()
 }
 
+function getDayStartTimestamp() {
+  const date = new Date()
+  date.setHours(0, 0, 0, 0)
+  return date.getTime()
+}
+
 module.exports = {
   /**
    * 提交校园入驻申请
@@ -63,6 +71,25 @@ module.exports = {
 
     if (!formData.campusName || !formData.contactPhone) {
       return { code: -1, msg: '请至少填写校园名称和邮箱' }
+    }
+
+    const todayStart = getDayStartTimestamp()
+    const { total: todaySubmitCount } = await applicationsCollection.where({
+      openid,
+      createdAt: db.command.gte(todayStart)
+    }).count()
+
+    if (todaySubmitCount >= APPLICATION_DAILY_LIMIT) {
+      return { code: -1, msg: `今天最多提交 ${APPLICATION_DAILY_LIMIT} 次入驻申请，明天再来试试` }
+    }
+
+    const { total: pendingSubmitCount } = await applicationsCollection.where({
+      openid,
+      status: '待审核'
+    }).count()
+
+    if (pendingSubmitCount >= APPLICATION_PENDING_LIMIT) {
+      return { code: -1, msg: `你还有 ${APPLICATION_PENDING_LIMIT} 条申请在审核中，先等等审核结果吧` }
     }
 
     // 内容安全检查

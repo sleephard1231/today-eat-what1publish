@@ -578,8 +578,7 @@ export async function submitCampusApplication(formData) {
       uni.$emit('app-state-changed')
       return record
     }
-    // 云端失败则降级为本地
-    console.warn('[app-state] 云端提交申请失败，降级为本地', result.msg)
+    throw new Error(result.msg || '提交失败，请稍后再试')
   }
 
   // 本地模式

@@ -86,8 +86,8 @@
       </text>
     </view>
 
-    <button class="submit-button" :style="accentFillStyle" @click="submitForm">
-      {{ isDraftSaved ? '提交到后台' : '保存申请内容' }}
+    <button class="submit-button" :style="accentFillStyle" :loading="isSubmitting" :disabled="isSubmitting" @click="submitForm">
+      {{ isSubmitting ? '提交中...' : (isDraftSaved ? '提交到后台' : '保存申请内容') }}
     </button>
 
     <!-- 城市选择弹窗 -->
@@ -148,6 +148,7 @@ const statusBarHeight = uni.getWindowInfo().statusBarHeight || 20
 const state = ref(getAppState())
 const isDraftSaved = ref(false)
 const privacyAgreed = ref(false)
+const isSubmitting = ref(false)
 const showCityPicker = ref(false)
 const customCity = ref('')
 const form = reactive({
@@ -283,6 +284,10 @@ function validateForm() {
 }
 
 async function submitForm() {
+  if (isSubmitting.value) {
+    return
+  }
+
   if (!validateForm()) {
     return
   }
@@ -298,25 +303,35 @@ async function submitForm() {
     return
   }
 
-  await submitCampusApplication({
-    campusName: form.campusName,
-    campusTag: form.campusTag,
-    city: form.city,
-    contactName: form.nickName,
-    contactPhone: form.email
-  })
-  clearCampusApplicationDraft()
+  isSubmitting.value = true
+  try {
+    await submitCampusApplication({
+      campusName: form.campusName,
+      campusTag: form.campusTag,
+      city: form.city,
+      contactName: form.nickName,
+      contactPhone: form.email
+    })
+    clearCampusApplicationDraft()
 
-  const cloudMode = isCloudUser()
-  uni.showToast({
-    title: cloudMode ? '已提交到后台，待审核' : '仅保存到本地，未连接后台',
-    icon: 'none',
-    duration: 2500
-  })
+    const cloudMode = isCloudUser()
+    uni.showToast({
+      title: cloudMode ? '已提交到后台，待审核' : '仅保存到本地，未连接后台',
+      icon: 'none',
+      duration: 2500
+    })
 
-  setTimeout(() => {
-    uni.navigateBack()
-  }, 500)
+    setTimeout(() => {
+      uni.navigateBack()
+    }, 500)
+  } catch (err) {
+    uni.showToast({
+      title: err?.message || '提交失败，请稍后再试',
+      icon: 'none'
+    })
+  } finally {
+    isSubmitting.value = false
+  }
 }
 
 function goBack() {
