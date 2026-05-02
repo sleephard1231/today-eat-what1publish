@@ -219,6 +219,26 @@ export async function cloudGetApprovedCampuses() {
 /**
  * 文本内容安全检查
  */
+export async function cloudGetCanteensByCampus(campusName) {
+  try {
+    const co = getCoCampus()
+    return await co.getCanteensByCampus(campusName)
+  } catch (err) {
+    console.warn('[cloud] cloudGetCanteensByCampus error', err)
+    return { code: -1, data: [], msg: '获取饭堂列表失败' }
+  }
+}
+
+export async function cloudGetCanteenFullData(campusName) {
+  try {
+    const co = getCoCampus()
+    return await co.getCanteenFullData(campusName)
+  } catch (err) {
+    console.warn('[cloud] cloudGetCanteenFullData error', err)
+    return { code: -1, data: [], msg: '获取饭堂数据失败' }
+  }
+}
+
 export async function cloudCheckText(content, scene = 1, openid = '') {
   try {
     const co = getCoContent()
@@ -395,6 +415,16 @@ export async function cloudIsCampusAdmin() {
   } catch (err) {
     console.warn('[cloud] cloudIsCampusAdmin error', err)
     return { code: -1, data: { isAdmin: false }, msg: '管理员身份校验失败' }
+  }
+}
+
+export async function cloudSyncAppData(token, payload = {}) {
+  try {
+    const co = getCoUser()
+    return await co.syncAppData(token, payload)
+  } catch (err) {
+    console.warn('[cloud] cloudSyncAppData error', err)
+    return { code: -1, msg: '应用数据同步失败' }
   }
 }
 

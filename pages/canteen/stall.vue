@@ -108,6 +108,9 @@ const canteenId = ref('')
 const dishList = ref([])
 const loading = ref(false)
 const canManage = ref(false)
+const DISH_REFRESH_TTL = 45 * 1000
+const STALL_DIRTY_KEY = 'eat-what-stall-dirty'
+let lastDishLoadedAt = 0
 
 const showDishForm = ref(false)
 const isEditing = ref(false)
@@ -175,16 +178,26 @@ onLoad(async (options) => {
 
 async function loadDishes() {
   if (!stallId.value) return
+  if (Date.now() - lastDishLoadedAt < DISH_REFRESH_TTL && dishList.value.length) return
   loading.value = true
   try {
     const res = await cloudGetDishesByStall(stallId.value)
     if (res.code === 0 && Array.isArray(res.data)) {
       dishList.value = res.data
+      lastDishLoadedAt = Date.now()
     }
   } catch (err) {
     console.warn('[stall] loadDishes error', err)
   }
   loading.value = false
+}
+
+async function refreshDishes() {
+  if (canteenId.value) {
+    uni.setStorageSync(STALL_DIRTY_KEY, canteenId.value)
+  }
+  lastDishLoadedAt = 0
+  await loadDishes()
 }
 
 async function refreshManagePermission() {
@@ -259,7 +272,7 @@ async function submitDishForm() {
     if (res.code === 0) {
       uni.showToast({ title: isEditing.value ? '保存成功' : '添加成功', icon: 'success' })
       closeDishForm()
-      await loadDishes()
+      await refreshDishes()
     } else {
       uni.showToast({ title: res.msg || '操作失败', icon: 'none' })
     }
@@ -289,7 +302,7 @@ function confirmDeleteDish(dish) {
         const res = await cloudDeleteDish(stallId.value, dish.id)
         if (res.code === 0) {
           uni.showToast({ title: '已删除', icon: 'success' })
-          await loadDishes()
+          await refreshDishes()
         } else {
           uni.showToast({ title: res.msg || '删除失败', icon: 'none' })
         }

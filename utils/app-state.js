@@ -12,12 +12,16 @@ import {
 } from '@/common/data.js'
 import {
   cloudSyncState,
+  cloudSyncAppData,
   cloudGetState,
   cloudSyncHistory,
   cloudGetHistory,
   cloudGetApprovedCampuses,
+  cloudGetCanteensByCampus,
+  cloudGetCanteenFullData,
   cloudSubmitApplication,
   cloudCheckText,
+  cloudGetStallsByCanteen,
   aiGenerateReason,
   cloudGetNormalDishCandidates,
   cloudGetCampusDishCandidates,
@@ -371,7 +375,7 @@ export function getAppState() {
   return ensureAppState()
 }
 
-export function saveAppState(patch = {}) {
+export function saveAppState(patch = {}, options = {}) {
   const current = ensureAppState()
   const nextState = mergeState({
     ...current,
@@ -394,7 +398,9 @@ export function saveAppState(patch = {}) {
   uni.$emit('app-state-changed')
 
   // 云端同步（异步，不阻塞本地操作）
-  syncStateToCloud(nextState)
+  if (!options.skipCloudSync) {
+    syncStateToCloud(nextState)
+  }
 
   return nextState
 }
@@ -406,6 +412,10 @@ const SYNC_DEBOUNCE_MS = 3000 // 3 秒内多次改动只同步最后一次
 
 let syncHistoryTimer = null
 let pendingHistoryData = null
+let syncAppDataTimer = null
+let pendingAppStateData = null
+let pendingAppHistoryData = null
+const SYNC_APP_DATA_DEBOUNCE_MS = 3000
 const SYNC_HISTORY_DEBOUNCE_MS = 5000 // 历史同步 5 秒防抖
 
 /**
@@ -442,13 +452,34 @@ function syncHistoryToCloud(historyList) {
   }, SYNC_HISTORY_DEBOUNCE_MS)
 }
 
+function syncAppDataToCloud(stateData, historyList) {
+  if (!isCloudUser()) return
+  pendingAppStateData = stateData || pendingAppStateData
+  pendingAppHistoryData = Array.isArray(historyList) ? historyList : pendingAppHistoryData
+  if (syncAppDataTimer) clearTimeout(syncAppDataTimer)
+  syncAppDataTimer = setTimeout(() => {
+    if (!pendingAppStateData && !pendingAppHistoryData) return
+    const user = getUser()
+    cloudSyncAppData(user.token, {
+      stateData: pendingAppStateData,
+      historyList: pendingAppHistoryData
+    }).catch((err) => {
+      console.warn('[app-state] sync app data failed', err)
+    })
+    pendingAppStateData = null
+    pendingAppHistoryData = null
+  }, SYNC_APP_DATA_DEBOUNCE_MS)
+}
+
 export function getHistoryList() {
   return safeRead(HISTORY_KEY, defaultHistory)
 }
 
-function saveHistoryList(historyList) {
+function saveHistoryList(historyList, options = {}) {
   safeWrite(HISTORY_KEY, historyList)
-  syncHistoryToCloud(historyList)
+  if (!options.skipCloudSync) {
+    syncHistoryToCloud(historyList)
+  }
 }
 
 function getFoodPool(state) {
@@ -548,10 +579,11 @@ export function drawMealResult() {
     stats: {
       servedCount: state.stats.servedCount + 1
     }
-  })
+  }, { skipCloudSync: true })
 
   const nextHistory = [result, ...getHistoryList()].slice(0, 30)
-  saveHistoryList(nextHistory)
+  saveHistoryList(nextHistory, { skipCloudSync: true })
+  syncAppDataToCloud(nextState, nextHistory)
 
   return {
     exhausted: false,
@@ -634,8 +666,7 @@ export async function fetchCloudCanteens(campusName) {
   }
 
   try {
-    const coCampus = uniCloud.importObject('co-campus')
-    const res = await coCampus.getCanteensByCampus(campusName)
+    const res = await cloudGetCanteensByCampus(campusName)
     if (res.code === 0 && Array.isArray(res.data)) {
       const list = res.data.map(item => ({
         id: item.id,
@@ -672,7 +703,7 @@ let cloudMenuCache = {
   normal: null,
   campus: {}
 }
-const MENU_CACHE_TTL = 1000 * 60 * 5
+const MENU_CACHE_TTL = 1000 * 60 * 10
 
 function isMenuCacheFresh(cache) {
   return cache && Date.now() - cache.fetchedAt < MENU_CACHE_TTL
@@ -767,10 +798,11 @@ export async function drawMealResultAsync() {
     stats: {
       servedCount: state.stats.servedCount + 1
     }
-  })
+  }, { skipCloudSync: true })
 
   const nextHistory = [result, ...getHistoryList()].slice(0, 30)
-  saveHistoryList(nextHistory)
+  saveHistoryList(nextHistory, { skipCloudSync: true })
+  syncAppDataToCloud(nextState, nextHistory)
 
   return {
     exhausted: false,
@@ -835,12 +867,19 @@ export function updateLatestMealResult(result) {
 
   const current = ensureAppState()
   if (current.daily?.lastResult?.id === result.id) {
-    saveAppState({
+    const nextState = saveAppState({
       daily: {
         ...current.daily,
         lastResult: result
       }
-    })
+    }, { skipCloudSync: true })
+    const history = getHistoryList()
+    const nextHistory = history.map((item) => (
+      item.id === result.id ? { ...item, ...result } : item
+    ))
+    saveHistoryList(nextHistory, { skipCloudSync: true })
+    syncAppDataToCloud(nextState, nextHistory)
+    return
   }
 
   const history = getHistoryList()
@@ -863,8 +902,7 @@ export async function fetchCloudStalls(canteenId, forceRefresh = false) {
   }
 
   try {
-    const coCampus = uniCloud.importObject('co-campus')
-    const res = await coCampus.getStallsByCanteen(canteenId)
+    const res = await cloudGetStallsByCanteen(canteenId)
     if (res.code === 0 && Array.isArray(res.data)) {
       if (res.data.length > 0) {
         cloudStallsCache[canteenId] = res.data
@@ -889,8 +927,7 @@ export async function fetchCanteenFullData(campusName) {
   if (!campusName) return []
 
   try {
-    const coCampus = uniCloud.importObject('co-campus')
-    const res = await coCampus.getCanteenFullData(campusName)
+    const res = await cloudGetCanteenFullData(campusName)
     if (res.code === 0 && Array.isArray(res.data)) {
       return res.data
     }

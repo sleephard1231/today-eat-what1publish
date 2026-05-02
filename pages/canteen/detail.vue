@@ -86,6 +86,9 @@ const canteenName = ref('')
 const stallList = ref([])
 const canManage = ref(false)
 const skipNextShow = ref(true)
+const STALL_REFRESH_TTL = 45 * 1000
+const STALL_DIRTY_KEY = 'eat-what-stall-dirty'
+let lastStallLoadedAt = 0
 
 const showStallForm = ref(false)
 const isEditingStall = ref(false)
@@ -142,20 +145,32 @@ onShow(async () => {
 
   // 从 stall 页面返回时刷新数据
   if (canteenId.value) {
+    if (uni.getStorageSync(STALL_DIRTY_KEY) === canteenId.value) {
+      uni.removeStorageSync(STALL_DIRTY_KEY)
+      await refreshStalls()
+      return
+    }
     await loadStalls()
   }
 })
 
 async function loadStalls() {
   if (!canteenId.value) return
+  if (Date.now() - lastStallLoadedAt < STALL_REFRESH_TTL && stallList.value.length) return
   try {
     const res = await cloudGetStallsByCanteen(canteenId.value)
     if (res.code === 0 && Array.isArray(res.data)) {
       stallList.value = res.data
+      lastStallLoadedAt = Date.now()
     }
   } catch (err) {
     console.warn('[detail] loadStalls error', err)
   }
+}
+
+async function refreshStalls() {
+  lastStallLoadedAt = 0
+  await loadStalls()
 }
 
 async function refreshManagePermission() {
@@ -232,7 +247,7 @@ async function submitStallForm() {
     if (res.code === 0) {
       uni.showToast({ title: isEditingStall.value ? '保存成功' : '添加成功', icon: 'success' })
       closeStallForm()
-      await loadStalls()
+      await refreshStalls()
     } else {
       uni.showToast({ title: res.msg || '操作失败', icon: 'none' })
     }
@@ -262,7 +277,7 @@ function confirmDeleteStall(stall) {
         const res = await cloudDeleteStall(canteenId.value, stall.id)
         if (res.code === 0) {
           uni.showToast({ title: '已删除', icon: 'success' })
-          await loadStalls()
+          await refreshStalls()
         } else {
           uni.showToast({ title: res.msg || '删除失败', icon: 'none' })
         }

@@ -25,7 +25,7 @@ const usersCollection = db.collection('eat-what-users')
 const TOKEN_EXPIRE_MS = 7 * 24 * 60 * 60 * 1000
 const APPLICATION_DAILY_LIMIT = 3
 const APPLICATION_PENDING_LIMIT = 5
-const READ_CACHE_TTL = 60 * 1000
+const READ_CACHE_TTL = 5 * 60 * 1000
 const readCache = new Map()
 
 function getReadCache(key) {

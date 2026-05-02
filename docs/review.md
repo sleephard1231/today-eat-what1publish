@@ -21,8 +21,8 @@
 
 但是目前还不能说已经优化好，主要风险不是“正常用户点几次会很贵”，而是以下几类问题：
 
-- 部分写接口没有鉴权，可能被任意调用，导致数据库写入量和云对象调用量失控。
-- AI 云对象没有强鉴权，未来一旦前端接上，可能成为最贵的成本入口。
+- 档口、菜品写接口已加管理员鉴权，但上线前必须确认 `ADMIN_OPENIDS` 已填真实 openid。
+- AI 云对象已加 token 鉴权、每日额度和用量记录，但需要上传 `co-ai` 与 `eat-what-ai-usage` schema 后才会在云端生效。
 - 抽餐流程会分别同步 state 和 history，慢速连续点击时会产生两次云对象调用。
 - 部分页面首屏会重复请求。
 - 部分列表接口没有分页、TTL 缓存和索引规划，数据量变大后查询成本会上升。
@@ -30,7 +30,7 @@
 
 建议优先级：
 
-1. 先修鉴权：所有写接口、AI 接口必须校验 token 或管理员身份。
+1. 先修鉴权：所有写接口、AI 接口必须校验 token 或管理员身份。（主要项已处理，需上传云端）
 2. 再降调用量：合并抽餐后的 state/history 同步。
 3. 再补数据库优化：给高频查询字段建索引，给公开列表加缓存。
 4. 最后整理架构：所有前端云调用统一走 `utils/cloud.js`。
@@ -94,26 +94,30 @@ async addStall(token, canteenId, stallData = {}) {
 }
 ```
 
-## 风险 2：AI 云对象缺少强鉴权，可能成为费用黑洞
+## 风险 2：AI 云对象鉴权和额度控制
 
 风险等级：严重
+
+修复状态：已修复。`co-ai` 已要求 AI 生成接口传入 token；批量生成接口已限制为管理员调用；已新增 `eat-what-ai-usage` 集合按用户和日期记录调用次数与 token 用量。
 
 相关位置：
 
 - `uniCloud-aliyun/cloudfunctions/co-ai/index.obj.js`
 - `utils/cloud.js`
 - `utils/app-state.js`
+- `uniCloud-aliyun/database/eat-what-ai-usage.schema.json`
 
 涉及方法：
 
-- `generateReason(context)`
-- `batchGenerateReasons(contexts)`
-- `generateFortuneText(context)`
+- `generateReason(token, context)`
+- `batchGenerateReasons(token, contexts)`
+- `generateFortuneText(token, context)`
+- `pickDishFromCandidates(token, payload)`
 - 前端封装：`aiGenerateReason`、`aiBatchGenerateReasons`、`aiGenerateFortuneText`
 
 问题说明：
 
-`co-ai.generateReason` 当前没有要求前端传 token，也没有验证用户身份。它只通过 `this.getClientInfo()` 取 `OPENID`，再用内存对象 `userCallLog` 做限流。
+原先 `co-ai.generateReason` 没有要求前端传 token，也没有验证用户身份，只通过 `this.getClientInfo()` 取 `OPENID`，再用内存对象 `userCallLog` 做限流。
 
 这个限流不够可靠：
 
@@ -139,13 +143,16 @@ async addStall(token, canteenId, stallData = {}) {
 
 `utils/app-state.js` 中虽然有 `aiGenerateReasonForMeal`，但 `pages/index/index.vue` 目前调用的是 `drawMealResult()`，没有真正等待或调用 AI 文案生成。所以当前版本暂时不会因为首页抽餐大量消耗 AI。
 
-建议修复：
+已处理：
 
-- `generateReason`、`batchGenerateReasons`、`generateFortuneText` 都要求传 token。
-- 在 `co-ai` 中复用用户 token 校验逻辑，或者单独查 `eat-what-users` 验证 token。
-- 按 openid 在数据库中记录每日 AI 调用次数。
-- 设置每日免费额度，例如每人每天最多 5 次 AI 文案。
-- 批量接口默认关闭，或者只允许管理员调用。
+- `generateReason`、`generateFortuneText`、`pickDishFromCandidates` 都要求传 token。
+- `batchGenerateReasons` 只允许管理员 token 调用。
+- 按 openid + 日期写入 `eat-what-ai-usage`，记录每日 `calls` 和 token 用量。
+- 每日额度读取后台 AI 配置中的 `dailyLimit`，默认 5 次。
+- 分钟限流读取后台 AI 配置中的 `minuteLimit`。
+
+仍建议后续优化：
+
 - 同一个用户、同一天、同一个食物和 MBTI/星座组合可以缓存结果，避免重复生成。
 
 建议策略：
@@ -292,17 +299,17 @@ syncAppData(token, { stateData, historyList })
 }
 ```
 
-## 风险 5：饭堂详情页首次进入可能重复拉取档口数据（未完全修复）
+## 风险 5：饭堂详情页首次进入可能重复拉取档口数据
 
 风险等级：中
 
-修复状态：部分修复。`onShow` 中已增加 `if (canteenId.value)` 判空（`detail.vue:137`），但首次进入时 `onLoad` 已设置 `canteenId.value`，因此 `onShow` 仍会触发第二次 `loadStalls()`，未实现 review 建议的 `hasLoaded` 标记。
+修复状态：已修复。`pages/canteen/detail.vue` 已增加 `skipNextShow` 标记，首次进入时只执行 `onLoad` 的 `loadStalls()`，从商铺菜品页返回时才由 `onShow` 刷新。
 
 相关位置：
 
 - `pages/canteen/detail.vue:128-141`
 
-当前代码：
+旧代码问题：
 
 ```js
 onLoad(async (options) => {
@@ -333,23 +340,21 @@ onShow(async () => {
 - 每次用户从饭堂列表进入饭堂详情页。
 - 用户频繁返回和进入不同饭堂。
 
-建议修复：
-
-添加 `hasLoaded` 或 `shouldRefresh` 标记：
+已处理方式：
 
 ```js
-let hasLoaded = false
+const skipNextShow = ref(true)
 
-onLoad(async () => {
+onLoad(async (options) => {
   await loadStalls()
-  hasLoaded = true
 })
 
 onShow(async () => {
-  if (!hasLoaded) return
-  if (needRefreshAfterEdit) {
-    await loadStalls()
+  if (skipNextShow.value) {
+    skipNextShow.value = false
+    return
   }
+  await loadStalls()
 })
 ```
 
@@ -403,9 +408,11 @@ onShow(async () => {
 }
 ```
 
-## 风险 7：公开列表接口没有服务端缓存
+## 风险 7：公开列表接口服务端缓存
 
 风险等级：中
+
+修复状态：已修复基础版。`co-campus` 已为公开读接口增加 60 秒云对象内存缓存，写操作、审核操作后会清空缓存。
 
 相关位置：
 
@@ -419,7 +426,7 @@ onShow(async () => {
 - `getCanteenFullData`
 - `getServicesByCampus`
 
-问题说明：
+原问题说明：
 
 这些接口读取的是公开数据，变化频率一般很低。但当前每次调用都会直接查数据库。
 
@@ -435,9 +442,14 @@ onShow(async () => {
 - 用户进入饭堂详情页。
 - 用户进入校园服务页。
 
-建议修复：
+已处理：
 
-- 云对象内部做短 TTL 内存缓存。
+- 云对象内部已做 60 秒 TTL 内存缓存。
+- 缓存覆盖 `getApprovedCampuses`、`getCanteensByCampus`、`getStallsByCanteen`、`getNormalDishCandidates`、`getCampusDishCandidates`、`getCanteenFullData`、`getServicesByCampus`、`getDishesByStall`。
+- 新增、编辑、删除档口/菜品和审核申请后会清空缓存。
+
+后续可继续优化：
+
 - 对学校、饭堂、档口、菜品数据使用版本号。
 - 后台编辑数据后更新版本号，前端发现版本变化再重新拉取。
 - 对全量菜单数据可以生成一个聚合集合，例如 `eat-what-menu-cache`，前端一次读取。
@@ -594,18 +606,18 @@ eat-what-services:
 - 对重复内容做 hash 缓存，短时间内重复提交不重复检查。
 - `checkTextBatch` 限制最大数量，例如最多 5 条。
 
-## 风险 11：提交入驻申请缺少用户级频率限制
+## 风险 11：提交入驻申请用户级频率限制
 
 风险等级：中
 
-修复状态：未修复。云端 `co-campus.submitApplication` 和前端 `pages/campus/join.vue` 均未实现用户级频率限制。
+修复状态：已修复。云端 `co-campus.submitApplication` 已限制每个用户每天最多提交 3 次、最多保留 5 条待审核申请；前端 `pages/campus/join.vue` 已增加提交中状态，防止连点重复提交。
 
 相关位置：
 
 - `co-campus.submitApplication`
 - `pages/campus/join.vue:285-320` — `submitForm` 无防重复提交、无每日次数限制
 
-问题说明：
+原问题说明：
 
 `submitApplication` 会检查同一个 openid、同一个 campusName、同一个 campusTag 是否已有待审核或已通过申请。但它没有限制用户每天可以提交多少不同学校申请。
 
@@ -623,10 +635,15 @@ eat-what-services:
 - 脚本批量提交随机学校名。
 - 用户误操作或恶意测试。
 
-建议修复：
+已处理：
 
 - 每个 openid 每天最多提交 3 次。
 - 每个 openid 未审核申请最多保留 5 条。
+- 限流检查放在内容安全检查之前，避免刷提交先消耗微信内容安全接口。
+- 云端提交失败时，前端不再静默降级成本地保存，会直接提示失败原因。
+
+仍建议后续优化：
+
 - 对手机号/联系方式做格式校验。
 - 对 campusName 做长度限制和字符限制。
 
@@ -701,6 +718,8 @@ eat-what-services:
 
 风险等级：中
 
+修复状态：已修复。`initAdminMenus`、`fixAdminMenusUrl`、`runDiagnostics`、`initBaseData` 已统一增加 `token` 参数，并调用 `_verifyAdmin(token)` 校验管理员 openid。
+
 相关位置：
 
 - `co-campus.initAdminMenus`
@@ -709,7 +728,7 @@ eat-what-services:
 - `co-campus.initBaseData`
 - `utils/cloud.js` 中对应封装
 
-问题说明：
+原问题说明：
 
 这些接口属于部署、后台维护或诊断用途。如果没有管理员鉴权，普通用户或外部调用者可能触发大量数据库查询和写入。
 
@@ -720,9 +739,13 @@ eat-what-services:
 - `initAdminMenus` 会循环查询和写入菜单。
 - `fixAdminMenusUrl` 会循环查询和更新菜单。
 
-建议修复：
+已处理：
 
-- 这些接口必须要求管理员 token。
+- 这些接口已要求管理员 token。
+- `utils/cloud.js` 中对应封装也已改为自动传入当前用户 token。
+
+仍建议后续优化：
+
 - 或者仅保留在开发环境，生产环境直接返回禁止调用。
 - 前端普通包不要暴露这些封装。
 
@@ -872,15 +895,15 @@ onShow(refreshState)       // 重复刷新 + 事件监听也可能导致额外�
 
 ### 第一阶段：必须先修
 
-1. 给档口、菜品所有写接口加 token 和管理员校验。
-2. 给 `co-ai` 所有接口加 token 校验和每日额度。
-3. 给部署/诊断类接口加管理员校验。
-4. 给 `submitApplication` 增加用户级频率限制。
+1. 给档口、菜品所有写接口加 token 和管理员校验。（已完成，需确认 `ADMIN_OPENIDS`）
+2. 给 `co-ai` 所有接口加 token 校验和每日额度。（已完成，需上传 `co-ai` 与 `eat-what-ai-usage` schema）
+3. 给部署/诊断类接口加管理员校验。（已完成，需上传 `co-campus`）
+4. 给 `submitApplication` 增加用户级频率限制。（已完成，需上传 `co-campus`）
 
 ### 第二阶段：降低正常调用量
 
 1. 合并 `syncState` 和 `syncHistory` 为一次 `syncAppData`。
-2. 修复 `detail.vue` 首屏重复 `loadStalls`。
+2. 修复 `detail.vue` 首屏重复 `loadStalls`。（已完成）
 3. 新增、编辑、删除后优先本地更新列表，减少整表重拉。
 4. 饭堂、档口、菜品增加本地 TTL 缓存。
 
@@ -1061,6 +1084,8 @@ onShow(refreshState)       // 重复刷新 + 事件监听也可能导致额外�
 
 风险等级：严重
 
+修复状态：本地已清理，云端需人工确认。当前本地 admin 项目中已不存在 `uni-stat-cron` 和 `uni-analyse-searchhot` 目录；但如果它们曾经上传到 uniCloud，仍必须在 DCloud / uniCloud 控制台手动删除或停用。
+
 相关位置：
 
 - `E:\AWeApptext\吃什么新版\admin\uniCloud-aliyun\cloudfunctions\uni-stat-cron`
@@ -1075,3 +1100,13 @@ onShow(refreshState)       // 重复刷新 + 事件监听也可能导致额外�
 - 到 DCloud / uniCloud 控制台确认 `uni-stat-cron` 和 `uni-analyse-searchhot` 是否仍存在。
 - 如果存在，手动删除或停用。
 - 再观察 24 小时用量曲线，看 GBs 是否明显下降。
+
+操作路径：
+
+```text
+DCloud 控制台 / uniCloud 控制台
+→ 选择当前服务空间
+→ 云函数/云对象
+→ 搜索 uni-stat-cron、uni-analyse-searchhot
+→ 如果存在，删除或停用
+```

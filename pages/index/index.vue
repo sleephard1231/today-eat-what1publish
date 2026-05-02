@@ -133,6 +133,17 @@
         </view>
 
         <button
+          v-if="canRequestAiReason"
+          class="result-popup__ai-button press-feedback"
+          :style="ghostButtonStyle"
+          hover-class="press-feedback--active"
+          hover-start-time="20"
+          hover-stay-time="90"
+          :disabled="isAiPicking"
+          @click="handleRequestAiPick"
+        >{{ isAiPicking ? 'AI 思考中...' : '让 AI 再挑一次' }}</button>
+
+        <button
           class="result-popup__button press-feedback"
           :style="accentFillStyle"
           hover-class="press-feedback--active"
@@ -156,6 +167,10 @@ const state = ref(getAppState())
 const isDrawing = ref(false)
 const showResultPopup = ref(false)
 const popupResult = ref(null)
+const isAiPicking = ref(false)
+const popupCandidates = ref([])
+const popupSeed = ref(0)
+const popupSelectedCanteenNames = ref([])
 const bouncingChip = ref('')
 const animatedAppetiteProgress = ref(0)
 const animatedEnergyProgress = ref(0)
@@ -247,6 +262,11 @@ const miniProgressTrackStyle = computed(() => {
 })
 
 const popupRevealReason = computed(() => buildRevealReason(popupResult.value))
+const canRequestAiReason = computed(() => (
+  !!popupResult.value &&
+  !popupResult.value.isAI &&
+  popupCandidates.value.length > 0
+))
 const popupMetaText = computed(() => {
   if (!popupResult.value) return ''
   if (popupResult.value.mode !== 'campus') return ''
@@ -273,6 +293,11 @@ const accentFillStyle = computed(() => ({
   background: `linear-gradient(135deg, ${theme.value.accent} 0%, ${theme.value.accentDeep} 100%)`,
   boxShadow: theme.value.shadow,
   color: '#ffffff'
+}))
+const ghostButtonStyle = computed(() => ({
+  background: theme.value.accentSoft,
+  color: theme.value.accent,
+  border: `1px solid ${theme.value.border}`
 }))
 const popupCardStyle = computed(() => ({
   background: `linear-gradient(180deg, ${theme.value.card} 0%, #ffffff 100%)`,
@@ -310,7 +335,8 @@ function applyAiPick(aiPick, candidates) {
     stallName: chosen.stallName || popupResult.value.stallName,
     category: chosen.category || popupResult.value.category,
     price: chosen.price || popupResult.value.price,
-    reason: aiPick.reason
+    reason: aiPick.reason,
+    isAI: true
   }
   updateLatestMealResult(popupResult.value)
 }
@@ -332,6 +358,9 @@ async function handleDrawMeal() {
   }
 
   popupResult.value = drawResult.result
+  popupCandidates.value = drawResult.candidates || []
+  popupSeed.value = drawResult.seed || Date.now()
+  popupSelectedCanteenNames.value = drawResult.selectedCanteenNames || []
   isDrawing.value = true
 
   drawTimer = setTimeout(() => {
@@ -339,22 +368,32 @@ async function handleDrawMeal() {
     showResultPopup.value = true
     drawTimer = null
   }, 1500)
+}
 
-  aiPickFromCandidates({
-    candidates: drawResult.candidates,
-    state: drawResult.state,
-    fortune: fortune.value,
-    seed: drawResult.seed,
-    selectedCanteenNames: drawResult.selectedCanteenNames
-  }).then((aiPick) => {
-    applyAiPick(aiPick, drawResult.candidates)
-  }).catch((err) => {
+async function handleRequestAiPick() {
+  if (isAiPicking.value || !popupResult.value) return
+
+  isAiPicking.value = true
+  try {
+    const aiPick = await aiPickFromCandidates({
+      candidates: popupCandidates.value,
+      state: state.value,
+      fortune: fortune.value,
+      seed: popupSeed.value,
+      selectedCanteenNames: popupSelectedCanteenNames.value
+    })
+    applyAiPick(aiPick, popupCandidates.value)
+  } catch (err) {
     console.warn('[index] ai pick failed', err?.message || err)
-  })
+    uni.showToast({ title: 'AI 暂时没想好，先吃这个也不错', icon: 'none' })
+  } finally {
+    isAiPicking.value = false
+  }
 }
 
 function closeResultPopup() {
   showResultPopup.value = false
+  isAiPicking.value = false
   clearRevealTimers()
 }
 
@@ -427,6 +466,7 @@ onUnload(() => {
 .result-popup__divider { height: 2rpx; margin-top: 24rpx; background: linear-gradient(90deg, rgba(255,138,61,0) 0%, rgba(255,138,61,0.22) 50%, rgba(255,138,61,0) 100%); }
 .result-popup__label { display: block; margin-top: 22rpx; color: #9f9185; font-size: 22rpx; font-weight: 700; letter-spacing: 2rpx; }
 .result-popup__reason { display: block; margin-top: 14rpx; color: #403127; font-size: 32rpx; line-height: 1.6; font-weight: 600; }
+.result-popup__ai-button { width: 100%; margin-top: 28rpx; border-radius: 24rpx; height: 76rpx; line-height: 76rpx; font-size: 28rpx; font-weight: 700; }
 .result-popup__button { margin-top: 32rpx; border-radius: 28rpx; height: 92rpx; line-height: 92rpx; font-size: 30rpx; font-weight: 700; letter-spacing: 4rpx; }
 
 @keyframes chipBounceTap {

@@ -321,6 +321,58 @@ module.exports = {
    * @param {string} token
    * @returns {{ code: number, data?: Array, msg?: string }}
    */
+  async syncAppData(token, payload = {}) {
+    const openid = await this._verifyToken(token)
+    if (!openid) {
+      return { code: -1, msg: 'token 无效或已过期' }
+    }
+
+    const now = Date.now()
+    const stateData = payload.stateData || null
+    const historyList = payload.historyList
+
+    if (stateData) {
+      const updateFields = { updatedAt: now }
+
+      if (stateData.mode !== undefined) updateFields.mode = stateData.mode
+      if (stateData.campusId !== undefined) updateFields.campusId = stateData.campusId
+      if (stateData.profile !== undefined) updateFields.profile = stateData.profile
+      if (stateData.daily !== undefined) updateFields.daily = stateData.daily
+      if (stateData.stats !== undefined) updateFields.stats = stateData.stats
+      if (stateData.selectedCanteen !== undefined) updateFields.selectedCanteen = stateData.selectedCanteen
+
+      const stateUpdateRes = await stateCollection.where({ openid }).update(updateFields)
+      const stateUpdated = stateUpdateRes.updated || stateUpdateRes.result?.updated || 0
+
+      if (!stateUpdated) {
+        await stateCollection.add({
+          openid,
+          ...stateData,
+          updatedAt: now
+        })
+      }
+    }
+
+    if (Array.isArray(historyList)) {
+      const records = historyList.slice(0, 30)
+      const historyUpdateRes = await historyCollection.where({ openid }).update({
+        records,
+        updatedAt: now
+      })
+      const historyUpdated = historyUpdateRes.updated || historyUpdateRes.result?.updated || 0
+
+      if (!historyUpdated) {
+        await historyCollection.add({
+          openid,
+          records,
+          updatedAt: now
+        })
+      }
+    }
+
+    return { code: 0, msg: '同步成功' }
+  },
+
   async getHistory(token) {
     const openid = await this._verifyToken(token)
     if (!openid) {
