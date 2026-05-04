@@ -1,0 +1,61 @@
+[
+  {
+    "IndexName": "idx_openid_createdAt",
+    "MgoKeySchema": {
+      "MgoIndexKeys": [
+        {
+          "Name": "openid",
+          "Direction": "1",
+          "Type": "varchar"
+        },
+        {
+          "Name": "createdAt",
+          "Direction": "-1",
+          "Type": "number"
+        }
+      ],
+      "MgoIsUnique": false
+    }
+  },
+  {
+    "IndexName": "idx_status_createdAt",
+    "MgoKeySchema": {
+      "MgoIndexKeys": [
+        {
+          "Name": "status",
+          "Direction": "1",
+          "Type": "varchar"
+        },
+        {
+          "Name": "createdAt",
+          "Direction": "-1",
+          "Type": "number"
+        }
+      ],
+      "MgoIsUnique": false
+    }
+  },
+  {
+    "IndexName": "idx_openid_status_createdAt",
+    "MgoKeySchema": {
+      "MgoIndexKeys": [
+        {
+          "Name": "openid",
+          "Direction": "1",
+          "Type": "varchar"
+        },
+        {
+          "Name": "status",
+          "Direction": "1",
+          "Type": "varchar"
+        },
+        {
+          "Name": "createdAt",
+          "Direction": "-1",
+          "Type": "number"
+        }
+      ],
+      "MgoIsUnique": false
+    }
+  }
+]

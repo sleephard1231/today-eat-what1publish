@@ -1,0 +1,38 @@
+[
+  {
+    "IndexName": "idx_openid_dateKey",
+    "MgoKeySchema": {
+      "MgoIndexKeys": [
+        {
+          "Name": "openid",
+          "Direction": "1",
+          "Type": "varchar"
+        },
+        {
+          "Name": "dateKey",
+          "Direction": "1",
+          "Type": "varchar"
+        }
+      ],
+      "MgoIsUnique": false
+    }
+  },
+  {
+    "IndexName": "idx_dateKey_updatedAt",
+    "MgoKeySchema": {
+      "MgoIndexKeys": [
+        {
+          "Name": "dateKey",
+          "Direction": "-1",
+          "Type": "varchar"
+        },
+        {
+          "Name": "updatedAt",
+          "Direction": "-1",
+          "Type": "number"
+        }
+      ],
+      "MgoIsUnique": false
+    }
+  }
+]

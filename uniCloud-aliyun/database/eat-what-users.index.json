@@ -1,0 +1,28 @@
+[
+  {
+    "IndexName": "idx_token",
+    "MgoKeySchema": {
+      "MgoIndexKeys": [
+        {
+          "Name": "token",
+          "Direction": "1",
+          "Type": "varchar"
+        }
+      ],
+      "MgoIsUnique": false
+    }
+  },
+  {
+    "IndexName": "idx_openid",
+    "MgoKeySchema": {
+      "MgoIndexKeys": [
+        {
+          "Name": "openid",
+          "Direction": "1",
+          "Type": "varchar"
+        }
+      ],
+      "MgoIsUnique": false
+    }
+  }
+]
