@@ -2,6 +2,7 @@
 const common_vendor = require("../../common/vendor.js");
 const common_data = require("../../common/data.js");
 const utils_appState = require("../../utils/app-state.js");
+const utils_userState = require("../../utils/user-state.js");
 const _sfc_main = {
   __name: "index",
   setup(__props) {
@@ -10,6 +11,10 @@ const _sfc_main = {
     const isDrawing = common_vendor.ref(false);
     const showResultPopup = common_vendor.ref(false);
     const popupResult = common_vendor.ref(null);
+    const isAiPicking = common_vendor.ref(false);
+    const popupCandidates = common_vendor.ref([]);
+    const popupSeed = common_vendor.ref(0);
+    const popupSelectedCanteenNames = common_vendor.ref([]);
     const bouncingChip = common_vendor.ref("");
     const animatedAppetiteProgress = common_vendor.ref(0);
     const animatedEnergyProgress = common_vendor.ref(0);
@@ -88,6 +93,7 @@ const _sfc_main = {
       };
     });
     const popupRevealReason = common_vendor.computed(() => buildRevealReason(popupResult.value));
+    const canRequestAiReason = common_vendor.computed(() => !!popupResult.value && !popupResult.value.isAI && popupCandidates.value.length > 0);
     const popupMetaText = common_vendor.computed(() => {
       if (!popupResult.value)
         return "";
@@ -113,6 +119,11 @@ const _sfc_main = {
       background: `linear-gradient(135deg, ${theme.value.accent} 0%, ${theme.value.accentDeep} 100%)`,
       boxShadow: theme.value.shadow,
       color: "#ffffff"
+    }));
+    const ghostButtonStyle = common_vendor.computed(() => ({
+      background: theme.value.accentSoft,
+      color: theme.value.accent,
+      border: `1px solid ${theme.value.border}`
     }));
     const popupCardStyle = common_vendor.computed(() => ({
       background: `linear-gradient(180deg, ${theme.value.card} 0%, #ffffff 100%)`,
@@ -149,7 +160,8 @@ const _sfc_main = {
         stallName: chosen.stallName || popupResult.value.stallName,
         category: chosen.category || popupResult.value.category,
         price: chosen.price || popupResult.value.price,
-        reason: aiPick.reason
+        reason: aiPick.reason,
+        isAI: true
       };
       utils_appState.updateLatestMealResult(popupResult.value);
     }
@@ -167,26 +179,45 @@ const _sfc_main = {
         return;
       }
       popupResult.value = drawResult.result;
+      popupCandidates.value = drawResult.candidates || [];
+      popupSeed.value = drawResult.seed || Date.now();
+      popupSelectedCanteenNames.value = drawResult.selectedCanteenNames || [];
       isDrawing.value = true;
       drawTimer = setTimeout(() => {
         isDrawing.value = false;
         showResultPopup.value = true;
         drawTimer = null;
       }, 1500);
-      utils_appState.aiPickFromCandidates({
-        candidates: drawResult.candidates,
-        state: drawResult.state,
-        fortune: fortune.value,
-        seed: drawResult.seed,
-        selectedCanteenNames: drawResult.selectedCanteenNames
-      }).then((aiPick) => {
-        applyAiPick(aiPick, drawResult.candidates);
-      }).catch((err) => {
-        common_vendor.index.__f__("warn", "at pages/index/index.vue:352", "[index] ai pick failed", (err == null ? void 0 : err.message) || err);
-      });
+    }
+    async function handleRequestAiPick() {
+      if (isAiPicking.value || !popupResult.value)
+        return;
+      if (!utils_userState.requireLogin({
+        cloudOnly: true,
+        content: "登录后才能让 AI 再帮你挑一次。"
+      })) {
+        return;
+      }
+      isAiPicking.value = true;
+      try {
+        const aiPick = await utils_appState.aiPickFromCandidates({
+          candidates: popupCandidates.value,
+          state: state.value,
+          fortune: fortune.value,
+          seed: popupSeed.value,
+          selectedCanteenNames: popupSelectedCanteenNames.value
+        });
+        applyAiPick(aiPick, popupCandidates.value);
+      } catch (err) {
+        common_vendor.index.__f__("warn", "at pages/index/index.vue:394", "[index] ai pick failed", (err == null ? void 0 : err.message) || err);
+        common_vendor.index.showToast({ title: "AI 暂时没想好，先吃这个也不错", icon: "none" });
+      } finally {
+        isAiPicking.value = false;
+      }
     }
     function closeResultPopup() {
       showResultPopup.value = false;
+      isAiPicking.value = false;
       clearRevealTimers();
     }
     common_vendor.onLoad(refreshState);
@@ -247,14 +278,21 @@ const _sfc_main = {
         R: common_vendor.t(popupMetaText.value)
       } : {}, {
         S: common_vendor.t(popupRevealReason.value),
-        T: common_vendor.s(accentFillStyle.value),
-        U: common_vendor.o(closeResultPopup, "93"),
-        V: common_vendor.s(popupCardStyle.value),
-        W: common_vendor.o(() => {
+        T: canRequestAiReason.value
+      }, canRequestAiReason.value ? {
+        U: common_vendor.t(isAiPicking.value ? "AI 思考中..." : "让 AI 再挑一次"),
+        V: common_vendor.s(ghostButtonStyle.value),
+        W: isAiPicking.value,
+        X: common_vendor.o(handleRequestAiPick, "84")
+      } : {}, {
+        Y: common_vendor.s(accentFillStyle.value),
+        Z: common_vendor.o(closeResultPopup, "13"),
+        aa: common_vendor.s(popupCardStyle.value),
+        ab: common_vendor.o(() => {
         }, "9d"),
-        X: common_vendor.o(closeResultPopup, "fb")
+        ac: common_vendor.o(closeResultPopup, "fb")
       }) : {}, {
-        Y: common_vendor.s(pageStyle.value)
+        ad: common_vendor.s(pageStyle.value)
       });
     };
   }

@@ -10,6 +10,7 @@
 import { cloudWxLogin, cloudGetProfile, cloudUpdateProfile, isCloudAvailable } from '@/utils/cloud.js'
 
 const USER_KEY = 'eat-what-user'
+const LOGIN_INTENT_KEY = 'eat-what-login-intent'
 
 const defaultUser = {
   openId: '',
@@ -42,6 +43,10 @@ export function getUser() {
   return safeRead(USER_KEY, defaultUser)
 }
 
+export function isLoggedIn() {
+  return Boolean(getUser().isLoggedIn)
+}
+
 export function saveUser(user) {
   safeWrite(USER_KEY, { ...defaultUser, ...user, isLoggedIn: true })
   uni.$emit('user-state-changed')
@@ -50,6 +55,18 @@ export function saveUser(user) {
 export function clearUser() {
   safeWrite(USER_KEY, { ...defaultUser })
   uni.$emit('user-state-changed')
+}
+
+export function consumeLoginIntent() {
+  try {
+    const value = uni.getStorageSync(LOGIN_INTENT_KEY)
+    if (value) {
+      uni.removeStorageSync(LOGIN_INTENT_KEY)
+    }
+    return Boolean(value)
+  } catch (error) {
+    return false
+  }
 }
 
 /**
@@ -148,4 +165,38 @@ export async function syncProfileToCloud(profileData = {}) {
 export function isCloudUser() {
   const user = getUser()
   return user.loginMode === 'cloud' && !!user.token
+}
+
+export function requireLogin(options = {}) {
+  const {
+    cloudOnly = false,
+    title = '先登录一下',
+    content = '登录后才能继续使用这个功能。',
+    redirect = true
+  } = options
+  const passed = cloudOnly ? isCloudUser() : isLoggedIn()
+
+  if (passed) {
+    return true
+  }
+
+  if (!redirect) {
+    uni.showToast({ title: content, icon: 'none' })
+    return false
+  }
+
+  uni.showModal({
+    title,
+    content,
+    confirmText: '去登录',
+    cancelText: '先不了',
+    success: (res) => {
+      if (res.confirm) {
+        safeWrite(LOGIN_INTENT_KEY, Date.now())
+        uni.switchTab({ url: '/pages/my/my' })
+      }
+    }
+  })
+
+  return false
 }

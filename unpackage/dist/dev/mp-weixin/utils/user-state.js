@@ -30,6 +30,9 @@ function safeWrite(key, value) {
 function getUser() {
   return safeRead(USER_KEY, defaultUser);
 }
+function isLoggedIn() {
+  return Boolean(getUser().isLoggedIn);
+}
 function saveUser(user) {
   safeWrite(USER_KEY, { ...defaultUser, ...user, isLoggedIn: true });
   common_vendor.index.$emit("user-state-changed");
@@ -51,7 +54,7 @@ async function wxCloudLogin(userInfo = {}) {
     });
     return { code: 0, data: result.data, loginMode: "cloud" };
   }
-  common_vendor.index.__f__("warn", "at utils/user-state.js:78", "[user-state] 云端登录失败，降级为本地登录:", result.msg);
+  common_vendor.index.__f__("warn", "at utils/user-state.js:82", "[user-state] 云端登录失败，降级为本地登录:", result.msg);
   return { code: result.code, msg: result.msg, loginMode: "local" };
 }
 function localLogin(userInfo = {}) {
@@ -92,17 +95,46 @@ async function syncProfileToCloud(profileData = {}) {
   try {
     await utils_cloud.cloudUpdateProfile(user.token, profileData);
   } catch (err) {
-    common_vendor.index.__f__("warn", "at utils/user-state.js:141", "[user-state] 同步资料到云端失败", err);
+    common_vendor.index.__f__("warn", "at utils/user-state.js:145", "[user-state] 同步资料到云端失败", err);
   }
 }
 function isCloudUser() {
   const user = getUser();
   return user.loginMode === "cloud" && !!user.token;
 }
+function requireLogin(options = {}) {
+  const {
+    cloudOnly = false,
+    title = "先登录一下",
+    content = "登录后才能继续使用这个功能。",
+    redirect = true
+  } = options;
+  const passed = cloudOnly ? isCloudUser() : isLoggedIn();
+  if (passed) {
+    return true;
+  }
+  if (!redirect) {
+    common_vendor.index.showToast({ title: content, icon: "none" });
+    return false;
+  }
+  common_vendor.index.showModal({
+    title,
+    content,
+    confirmText: "去登录",
+    cancelText: "先不了",
+    success: (res) => {
+      if (res.confirm) {
+        common_vendor.index.switchTab({ url: "/pages/my/my" });
+      }
+    }
+  });
+  return false;
+}
 exports.clearUser = clearUser;
 exports.getUser = getUser;
 exports.handleLogin = handleLogin;
 exports.isCloudUser = isCloudUser;
+exports.requireLogin = requireLogin;
 exports.saveUser = saveUser;
 exports.syncProfileToCloud = syncProfileToCloud;
 //# sourceMappingURL=../../.sourcemap/mp-weixin/utils/user-state.js.map

@@ -593,39 +593,27 @@ export function drawMealResult() {
 }
 
 export async function submitCampusApplication(formData) {
+  if (!isCloudUser()) {
+    throw new Error('请先登录后再提交申请')
+  }
+
   // 云端模式：调云函数
-  if (isCloudUser()) {
-    const user = getUser()
-    const result = await cloudSubmitApplication(user.token, formData)
-    if (result.code === 0 && result.data) {
-      // 同步到本地存储
-      const applications = getStoredApplications()
-      const record = {
-        ...formData,
-        campusId: result.data.campusId || `campus-${Date.now()}`,
-        createdAt: formatTimeLabel(),
-        status: result.data.status || '待审核'
-      }
-      safeWrite(APPLICATION_KEY, [record, ...applications])
-      uni.$emit('app-state-changed')
-      return record
+  const user = getUser()
+  const result = await cloudSubmitApplication(user.token, formData)
+  if (result.code === 0 && result.data) {
+    // 同步到本地存储
+    const applications = getStoredApplications()
+    const record = {
+      ...formData,
+      campusId: result.data.campusId || `campus-${Date.now()}`,
+      createdAt: formatTimeLabel(),
+      status: result.data.status || '待审核'
     }
-    throw new Error(result.msg || '提交失败，请稍后再试')
+    safeWrite(APPLICATION_KEY, [record, ...applications])
+    uni.$emit('app-state-changed')
+    return record
   }
-
-  // 本地模式
-  const applications = getStoredApplications()
-  const campusId = `campus-${Date.now()}`
-  const record = {
-    ...formData,
-    campusId,
-    createdAt: formatTimeLabel(),
-    status: '待审核'
-  }
-
-  safeWrite(APPLICATION_KEY, [record, ...applications])
-  uni.$emit('app-state-changed')
-  return record
+  throw new Error(result.msg || '提交失败，请稍后再试')
 }
 
 export function getCampusApplications() {

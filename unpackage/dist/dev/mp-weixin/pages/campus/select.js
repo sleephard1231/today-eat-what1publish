@@ -2,6 +2,7 @@
 const common_vendor = require("../../common/vendor.js");
 const common_data = require("../../common/data.js");
 const utils_appState = require("../../utils/app-state.js");
+const utils_userState = require("../../utils/user-state.js");
 const _sfc_main = {
   __name: "select",
   setup(__props) {
@@ -179,7 +180,13 @@ const _sfc_main = {
       }, 400);
     }
     function goJoinPage() {
-      common_vendor.index.showToast({ title: "🚧 校园入驻功能待开放", icon: "none" });
+      if (!utils_userState.requireLogin({
+        cloudOnly: true,
+        content: "登录后才能提交校园入驻申请。"
+      })) {
+        return;
+      }
+      common_vendor.index.navigateTo({ url: "/pages/campus/join" });
     }
     function goBack() {
       common_vendor.index.navigateBack();

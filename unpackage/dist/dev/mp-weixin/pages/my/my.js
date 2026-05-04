@@ -265,6 +265,9 @@ const _sfc_main = {
       common_vendor.index.navigateTo({ url: "/pages/campus/select" });
     }
     function goHistoryPage() {
+      if (!utils_userState.requireLogin({ content: "登录后才能查看你的历史记录。" })) {
+        return;
+      }
       common_vendor.index.navigateTo({ url: "/pages/history/index" });
     }
     function goCanteenPage() {

@@ -90,12 +90,21 @@ async function cloudSubmitApplication(token, formData) {
     return { code: -1, msg: "提交申请失败" };
   }
 }
+async function cloudGetCanteensByCampus(campusName) {
+  try {
+    const co = getCoCampus();
+    return await co.getCanteensByCampus(campusName);
+  } catch (err) {
+    common_vendor.index.__f__("warn", "at utils/cloud.js:227", "[cloud] cloudGetCanteensByCampus error", err);
+    return { code: -1, data: [], msg: "获取饭堂列表失败" };
+  }
+}
 async function cloudGetStallsByCanteen(canteenId) {
   try {
     const co = getCoCampus();
     return await co.getStallsByCanteen(canteenId);
   } catch (err) {
-    common_vendor.index.__f__("warn", "at utils/cloud.js:256", "[cloud] cloudGetStallsByCanteen error", err);
+    common_vendor.index.__f__("warn", "at utils/cloud.js:276", "[cloud] cloudGetStallsByCanteen error", err);
     return { code: -1, data: [], msg: "获取商铺列表失败" };
   }
 }
@@ -107,7 +116,7 @@ async function cloudAddStall(canteenId, stallData = {}) {
     const co = getCoCampus();
     return await co.addStall(token, canteenId, stallData);
   } catch (err) {
-    common_vendor.index.__f__("warn", "at utils/cloud.js:273", "[cloud] cloudAddStall error", err);
+    common_vendor.index.__f__("warn", "at utils/cloud.js:293", "[cloud] cloudAddStall error", err);
     return { code: -1, msg: "添加商铺失败" };
   }
 }
@@ -119,7 +128,7 @@ async function cloudUpdateStall(canteenId, stallId, stallData = {}) {
     const co = getCoCampus();
     return await co.updateStall(token, canteenId, stallId, stallData);
   } catch (err) {
-    common_vendor.index.__f__("warn", "at utils/cloud.js:291", "[cloud] cloudUpdateStall error", err);
+    common_vendor.index.__f__("warn", "at utils/cloud.js:311", "[cloud] cloudUpdateStall error", err);
     return { code: -1, msg: "更新商铺失败" };
   }
 }
@@ -131,7 +140,7 @@ async function cloudDeleteStall(canteenId, stallId) {
     const co = getCoCampus();
     return await co.deleteStall(token, canteenId, stallId);
   } catch (err) {
-    common_vendor.index.__f__("warn", "at utils/cloud.js:308", "[cloud] cloudDeleteStall error", err);
+    common_vendor.index.__f__("warn", "at utils/cloud.js:328", "[cloud] cloudDeleteStall error", err);
     return { code: -1, msg: "删除商铺失败" };
   }
 }
@@ -140,7 +149,7 @@ async function cloudGetDishesByStall(stallId) {
     const co = getCoCampus();
     return await co.getDishesByStall(stallId);
   } catch (err) {
-    common_vendor.index.__f__("warn", "at utils/cloud.js:324", "[cloud] cloudGetDishesByStall error", err);
+    common_vendor.index.__f__("warn", "at utils/cloud.js:344", "[cloud] cloudGetDishesByStall error", err);
     return { code: -1, data: [], msg: "获取菜品列表失败" };
   }
 }
@@ -152,7 +161,7 @@ async function cloudAddDish(stallId, canteenId, dishData = {}) {
     const co = getCoCampus();
     return await co.addDish(token, stallId, canteenId, dishData);
   } catch (err) {
-    common_vendor.index.__f__("warn", "at utils/cloud.js:342", "[cloud] cloudAddDish error", err);
+    common_vendor.index.__f__("warn", "at utils/cloud.js:362", "[cloud] cloudAddDish error", err);
     return { code: -1, msg: "添加菜品失败" };
   }
 }
@@ -164,7 +173,7 @@ async function cloudUpdateDish(stallId, dishId, dishData = {}) {
     const co = getCoCampus();
     return await co.updateDish(token, stallId, dishId, dishData);
   } catch (err) {
-    common_vendor.index.__f__("warn", "at utils/cloud.js:360", "[cloud] cloudUpdateDish error", err);
+    common_vendor.index.__f__("warn", "at utils/cloud.js:380", "[cloud] cloudUpdateDish error", err);
     return { code: -1, msg: "更新菜品失败" };
   }
 }
@@ -176,7 +185,7 @@ async function cloudDeleteDish(stallId, dishId) {
     const co = getCoCampus();
     return await co.deleteDish(token, stallId, dishId);
   } catch (err) {
-    common_vendor.index.__f__("warn", "at utils/cloud.js:377", "[cloud] cloudDeleteDish error", err);
+    common_vendor.index.__f__("warn", "at utils/cloud.js:397", "[cloud] cloudDeleteDish error", err);
     return { code: -1, msg: "删除菜品失败" };
   }
 }
@@ -188,8 +197,17 @@ async function cloudIsCampusAdmin() {
     const co = getCoCampus();
     return await co.isAdmin(token);
   } catch (err) {
-    common_vendor.index.__f__("warn", "at utils/cloud.js:396", "[cloud] cloudIsCampusAdmin error", err);
+    common_vendor.index.__f__("warn", "at utils/cloud.js:416", "[cloud] cloudIsCampusAdmin error", err);
     return { code: -1, data: { isAdmin: false }, msg: "管理员身份校验失败" };
+  }
+}
+async function cloudSyncAppData(token, payload = {}) {
+  try {
+    const co = getCoUser();
+    return await co.syncAppData(token, payload);
+  } catch (err) {
+    common_vendor.index.__f__("warn", "at utils/cloud.js:426", "[cloud] cloudSyncAppData error", err);
+    return { code: -1, msg: "应用数据同步失败" };
   }
 }
 async function cloudGetNormalDishCandidates(limit = 80) {
@@ -197,7 +215,7 @@ async function cloudGetNormalDishCandidates(limit = 80) {
     const co = getCoCampus();
     return await co.getNormalDishCandidates(limit);
   } catch (err) {
-    common_vendor.index.__f__("warn", "at utils/cloud.js:410", "[cloud] cloudGetNormalDishCandidates error", err);
+    common_vendor.index.__f__("warn", "at utils/cloud.js:440", "[cloud] cloudGetNormalDishCandidates error", err);
     return { code: -1, data: [], msg: "获取普通版菜品池失败" };
   }
 }
@@ -206,7 +224,7 @@ async function cloudGetCampusDishCandidates(canteenIds = [], limit = 120) {
     const co = getCoCampus();
     return await co.getCampusDishCandidates(canteenIds, limit);
   } catch (err) {
-    common_vendor.index.__f__("warn", "at utils/cloud.js:425", "[cloud] cloudGetCampusDishCandidates error", err);
+    common_vendor.index.__f__("warn", "at utils/cloud.js:455", "[cloud] cloudGetCampusDishCandidates error", err);
     return { code: -1, data: [], msg: "获取校园版菜品池失败" };
   }
 }
@@ -218,7 +236,7 @@ async function aiPickDishFromCandidates(payload = {}) {
     const co = getCoAi();
     return await co.pickDishFromCandidates(token, payload);
   } catch (err) {
-    common_vendor.index.__f__("warn", "at utils/cloud.js:451", "[cloud] aiPickDishFromCandidates error", err);
+    common_vendor.index.__f__("warn", "at utils/cloud.js:483", "[cloud] aiPickDishFromCandidates error", err);
     return { code: -1, msg: "AI 推荐失败" };
   }
 }
@@ -228,11 +246,13 @@ exports.cloudAddStall = cloudAddStall;
 exports.cloudDeleteDish = cloudDeleteDish;
 exports.cloudDeleteStall = cloudDeleteStall;
 exports.cloudGetCampusDishCandidates = cloudGetCampusDishCandidates;
+exports.cloudGetCanteensByCampus = cloudGetCanteensByCampus;
 exports.cloudGetDishesByStall = cloudGetDishesByStall;
 exports.cloudGetNormalDishCandidates = cloudGetNormalDishCandidates;
 exports.cloudGetStallsByCanteen = cloudGetStallsByCanteen;
 exports.cloudIsCampusAdmin = cloudIsCampusAdmin;
 exports.cloudSubmitApplication = cloudSubmitApplication;
+exports.cloudSyncAppData = cloudSyncAppData;
 exports.cloudSyncHistory = cloudSyncHistory;
 exports.cloudSyncState = cloudSyncState;
 exports.cloudUpdateDish = cloudUpdateDish;

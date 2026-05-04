@@ -2,6 +2,8 @@
 const common_vendor = require("../../common/vendor.js");
 const utils_appState = require("../../utils/app-state.js");
 const utils_cloud = require("../../utils/cloud.js");
+const STALL_REFRESH_TTL = 45 * 1e3;
+const STALL_DIRTY_KEY = "eat-what-stall-dirty";
 const _sfc_main = {
   __name: "detail",
   setup(__props) {
@@ -10,6 +12,8 @@ const _sfc_main = {
     const canteenName = common_vendor.ref("");
     const stallList = common_vendor.ref([]);
     const canManage = common_vendor.ref(false);
+    const skipNextShow = common_vendor.ref(true);
+    let lastStallLoadedAt = 0;
     const showStallForm = common_vendor.ref(false);
     const isEditingStall = common_vendor.ref(false);
     const editingStallId = common_vendor.ref("");
@@ -49,21 +53,37 @@ const _sfc_main = {
       await loadStalls();
     });
     common_vendor.onShow(async () => {
+      if (skipNextShow.value) {
+        skipNextShow.value = false;
+        return;
+      }
       if (canteenId.value) {
+        if (common_vendor.index.getStorageSync(STALL_DIRTY_KEY) === canteenId.value) {
+          common_vendor.index.removeStorageSync(STALL_DIRTY_KEY);
+          await refreshStalls();
+          return;
+        }
         await loadStalls();
       }
     });
     async function loadStalls() {
       if (!canteenId.value)
         return;
+      if (Date.now() - lastStallLoadedAt < STALL_REFRESH_TTL && stallList.value.length)
+        return;
       try {
         const res = await utils_cloud.cloudGetStallsByCanteen(canteenId.value);
         if (res.code === 0 && Array.isArray(res.data)) {
           stallList.value = res.data;
+          lastStallLoadedAt = Date.now();
         }
       } catch (err) {
-        common_vendor.index.__f__("warn", "at pages/canteen/detail.vue:151", "[detail] loadStalls error", err);
+        common_vendor.index.__f__("warn", "at pages/canteen/detail.vue:167", "[detail] loadStalls error", err);
       }
+    }
+    async function refreshStalls() {
+      lastStallLoadedAt = 0;
+      await loadStalls();
     }
     async function refreshManagePermission() {
       var _a;
@@ -128,12 +148,12 @@ const _sfc_main = {
         if (res.code === 0) {
           common_vendor.index.showToast({ title: isEditingStall.value ? "保存成功" : "添加成功", icon: "success" });
           closeStallForm();
-          await loadStalls();
+          await refreshStalls();
         } else {
           common_vendor.index.showToast({ title: res.msg || "操作失败", icon: "none" });
         }
       } catch (err) {
-        common_vendor.index.__f__("warn", "at pages/canteen/detail.vue:234", "[detail] submitStallForm error", err);
+        common_vendor.index.__f__("warn", "at pages/canteen/detail.vue:255", "[detail] submitStallForm error", err);
         common_vendor.index.showToast({ title: "操作失败", icon: "none" });
       }
       common_vendor.index.hideLoading();
@@ -156,7 +176,7 @@ const _sfc_main = {
             const res = await utils_cloud.cloudDeleteStall(canteenId.value, stall.id);
             if (res.code === 0) {
               common_vendor.index.showToast({ title: "已删除", icon: "success" });
-              await loadStalls();
+              await refreshStalls();
             } else {
               common_vendor.index.showToast({ title: res.msg || "删除失败", icon: "none" });
             }

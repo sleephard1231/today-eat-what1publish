@@ -2,6 +2,8 @@
 const common_vendor = require("../../common/vendor.js");
 const utils_appState = require("../../utils/app-state.js");
 const utils_cloud = require("../../utils/cloud.js");
+const DISH_REFRESH_TTL = 45 * 1e3;
+const STALL_DIRTY_KEY = "eat-what-stall-dirty";
 const _sfc_main = {
   __name: "stall",
   setup(__props) {
@@ -14,6 +16,7 @@ const _sfc_main = {
     const dishList = common_vendor.ref([]);
     const loading = common_vendor.ref(false);
     const canManage = common_vendor.ref(false);
+    let lastDishLoadedAt = 0;
     const showDishForm = common_vendor.ref(false);
     const isEditing = common_vendor.ref(false);
     const editingDishId = common_vendor.ref("");
@@ -69,16 +72,26 @@ const _sfc_main = {
     async function loadDishes() {
       if (!stallId.value)
         return;
+      if (Date.now() - lastDishLoadedAt < DISH_REFRESH_TTL && dishList.value.length)
+        return;
       loading.value = true;
       try {
         const res = await utils_cloud.cloudGetDishesByStall(stallId.value);
         if (res.code === 0 && Array.isArray(res.data)) {
           dishList.value = res.data;
+          lastDishLoadedAt = Date.now();
         }
       } catch (err) {
-        common_vendor.index.__f__("warn", "at pages/canteen/stall.vue:185", "[stall] loadDishes error", err);
+        common_vendor.index.__f__("warn", "at pages/canteen/stall.vue:190", "[stall] loadDishes error", err);
       }
       loading.value = false;
+    }
+    async function refreshDishes() {
+      if (canteenId.value) {
+        common_vendor.index.setStorageSync(STALL_DIRTY_KEY, canteenId.value);
+      }
+      lastDishLoadedAt = 0;
+      await loadDishes();
     }
     async function refreshManagePermission() {
       var _a;
@@ -142,12 +155,12 @@ const _sfc_main = {
         if (res.code === 0) {
           common_vendor.index.showToast({ title: isEditing.value ? "保存成功" : "添加成功", icon: "success" });
           closeDishForm();
-          await loadDishes();
+          await refreshDishes();
         } else {
           common_vendor.index.showToast({ title: res.msg || "操作失败", icon: "none" });
         }
       } catch (err) {
-        common_vendor.index.__f__("warn", "at pages/canteen/stall.vue:267", "[stall] submitDishForm error", err);
+        common_vendor.index.__f__("warn", "at pages/canteen/stall.vue:280", "[stall] submitDishForm error", err);
         common_vendor.index.showToast({ title: "操作失败", icon: "none" });
       }
       common_vendor.index.hideLoading();
@@ -170,7 +183,7 @@ const _sfc_main = {
             const res = await utils_cloud.cloudDeleteDish(stallId.value, dish.id);
             if (res.code === 0) {
               common_vendor.index.showToast({ title: "已删除", icon: "success" });
-              await loadDishes();
+              await refreshDishes();
             } else {
               common_vendor.index.showToast({ title: res.msg || "删除失败", icon: "none" });
             }

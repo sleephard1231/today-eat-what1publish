@@ -9,6 +9,10 @@
 
 // ⚠️ 上线前必须填入管理员 openid
 const ADMIN_OPENIDS = [] // 如 ['oXXXXXXXXXXXX']
+const ENV_ADMIN_OPENIDS = String(process.env.ADMIN_OPENIDS || '')
+  .split(',')
+  .map((openid) => openid.trim())
+  .filter(Boolean)
 
 const db = uniCloud.database()
 const applicationsCollection = db.collection('eat-what-applications')
@@ -48,6 +52,37 @@ function setReadCache(key, value) {
 
 function clearReadCache() {
   readCache.clear()
+}
+
+async function verifyUniIdAdmin(context, token = '') {
+  try {
+    const clientInfo = context.getClientInfo ? (context.getClientInfo() || {}) : {}
+    const runtimeToken = token || (typeof context.getUniIdToken === 'function' ? context.getUniIdToken() : '')
+    const uid = clientInfo.uid || clientInfo.UID || ''
+    const role = clientInfo.role || clientInfo.ROLE || []
+    if (role.includes('admin') || role.includes('super_admin')) {
+      return { uid }
+    }
+
+    if (!runtimeToken) return null
+
+    try {
+      const uniID = require('uni-id-common')
+      const uniIDIns = uniID.createInstance({ clientInfo })
+      const payload = await uniIDIns.checkToken(runtimeToken, { autoRefresh: false })
+      if (payload.code || payload.errCode) return null
+
+      const payloadRole = payload.role || []
+      if (payloadRole.includes('admin') || payloadRole.includes('super_admin')) {
+        return { uid: payload.uid || uid }
+      }
+    } catch (err) {
+      console.warn('[co-campus] verify uni-id token failed', err.message || err)
+    }
+  } catch (err) {
+    console.warn('[co-campus] verify uni-admin context failed', err.message || err)
+  }
+  return null
 }
 
 function getDayStartTimestamp() {
@@ -278,15 +313,23 @@ module.exports = {
       .orderBy('sort', 'asc')
       .get()
 
-    if (!stalls.length) {
-      return setReadCache(cacheKey, { code: 0, data: [] })
-    }
-
     // 批量查询所有档口的菜品
     const stallIds = stalls.map((s) => s._id)
-    const { data: allDishes } = await dishesCollection
+    let allDishes = []
+    if (stallIds.length) {
+      const { data: stallDishes } = await dishesCollection
+        .where({
+          stallId: db.command.in(stallIds),
+          status: 'active'
+        })
+        .orderBy('sort', 'asc')
+        .get()
+      allDishes = stallDishes
+    }
+
+    const { data: directDishes } = await dishesCollection
       .where({
-        stallId: db.command.in(stallIds),
+        canteenId,
         status: 'active'
       })
       .orderBy('sort', 'asc')
@@ -308,15 +351,39 @@ module.exports = {
       })
     })
 
+    const assignedDishIds = new Set(allDishes.map((dish) => dish._id))
+    const orphanDishes = directDishes
+      .filter((dish) => !assignedDishIds.has(dish._id) && (!dish.stallId || !stallIds.includes(dish.stallId)))
+      .map((dish) => ({
+        id: dish._id,
+        name: dish.name,
+        category: dish.category || '',
+        tag: dish.tag || '',
+        price: dish.price || '',
+        vibe: dish.vibe || ''
+      }))
+
+    const result = stalls.map((s) => ({
+      id: s._id,
+      name: s.name,
+      category: s.category || '',
+      remark: s.remark || '',
+      dishes: dishesByStall[s._id] || []
+    }))
+
+    if (orphanDishes.length) {
+      result.push({
+        id: `${canteenId}-direct-dishes`,
+        name: '精选菜品',
+        category: '推荐',
+        remark: '',
+        dishes: orphanDishes
+      })
+    }
+
     return setReadCache(cacheKey, {
       code: 0,
-      data: stalls.map((s) => ({
-        id: s._id,
-        name: s.name,
-        category: s.category || '',
-        remark: s.remark || '',
-        dishes: dishesByStall[s._id] || []
-      }))
+      data: result
     })
   },
 
@@ -391,18 +458,35 @@ module.exports = {
     })
 
     const stallIds = stalls.map((stall) => stall._id)
-    if (!stallIds.length) {
-      return setReadCache(cacheKey, { code: 0, data: [] })
+    let dishes = []
+    if (stallIds.length) {
+      const { data: stallDishes } = await dishesCollection
+        .where({
+          stallId: db.command.in(stallIds),
+          status: 'active'
+        })
+        .orderBy('sort', 'asc')
+        .limit(safeLimit)
+        .get()
+      dishes = stallDishes
     }
 
-    const { data: dishes } = await dishesCollection
+    const { data: directDishes } = await dishesCollection
       .where({
-        stallId: db.command.in(stallIds),
+        canteenId: db.command.in(ids),
         status: 'active'
       })
       .orderBy('sort', 'asc')
       .limit(safeLimit)
       .get()
+
+    const dishMap = new Map()
+    dishes.concat(directDishes).forEach((dish) => {
+      if (!dishMap.has(dish._id)) {
+        dishMap.set(dish._id, dish)
+      }
+    })
+    dishes = Array.from(dishMap.values()).slice(0, safeLimit)
 
     return setReadCache(cacheKey, {
       code: 0,
@@ -475,6 +559,13 @@ module.exports = {
         .get()
       allDishes = dishes
     }
+    const { data: directDishes } = await dishesCollection
+      .where({
+        canteenId: db.command.in(canteenIds),
+        status: 'active'
+      })
+      .orderBy('sort', 'asc')
+      .get()
 
     // 按档口分组菜品
     const dishesByStall = {}
@@ -483,6 +574,24 @@ module.exports = {
         dishesByStall[dish.stallId] = []
       }
       dishesByStall[dish.stallId].push({
+        id: dish._id,
+        name: dish.name,
+        category: dish.category || '',
+        tag: dish.tag || '',
+        price: dish.price || '',
+        vibe: dish.vibe || ''
+      })
+    })
+
+    const assignedDishIds = new Set(allDishes.map((dish) => dish._id))
+    const directDishesByCanteen = {}
+    directDishes.forEach((dish) => {
+      if (assignedDishIds.has(dish._id)) return
+      if (dish.stallId && stallIds.includes(dish.stallId)) return
+      if (!directDishesByCanteen[dish.canteenId]) {
+        directDishesByCanteen[dish.canteenId] = []
+      }
+      directDishesByCanteen[dish.canteenId].push({
         id: dish._id,
         name: dish.name,
         category: dish.category || '',
@@ -505,6 +614,21 @@ module.exports = {
         remark: stall.remark || '',
         dishes: dishesByStall[stall._id] || []
       })
+    })
+
+    Object.entries(directDishesByCanteen).forEach(([canteenId, dishes]) => {
+      if (!stallsByCanteen[canteenId]) {
+        stallsByCanteen[canteenId] = []
+      }
+      if (dishes.length) {
+        stallsByCanteen[canteenId].push({
+          id: `${canteenId}-direct-dishes`,
+          name: '精选菜品',
+          category: '推荐',
+          remark: '',
+          dishes
+        })
+      }
     })
 
     // 组装最终结果
@@ -874,8 +998,8 @@ module.exports = {
    * @returns {{ code: number, data?: Array, msg?: string }}
    */
   async getPendingApplications(token) {
-    const openid = await this._verifyToken(token)
-    if (!openid || !ADMIN_OPENIDS.includes(openid)) {
+    const admin = await this._verifyAdmin(token)
+    if (!admin) {
       return { code: -1, msg: '无管理权限' }
     }
 
@@ -897,8 +1021,8 @@ module.exports = {
    * @returns {{ code: number, msg?: string }}
    */
   async reviewApplication(token, applicationId, action, note = '') {
-    const openid = await this._verifyToken(token)
-    if (!openid || !ADMIN_OPENIDS.includes(openid)) {
+    const admin = await this._verifyAdmin(token)
+    if (!admin) {
       return { code: -1, msg: '无管理权限' }
     }
 
@@ -911,7 +1035,7 @@ module.exports = {
     await applicationsCollection.doc(applicationId).update({
       status,
       reviewNote: note,
-      reviewedBy: openid,
+      reviewedBy: admin,
       reviewedAt: Date.now(),
       updatedAt: Date.now()
     })
@@ -957,6 +1081,16 @@ module.exports = {
     return { code: 0, data: { isAdmin: !!openid } }
   },
 
+  async clearReadCache(token = '') {
+    const admin = await this._verifyAdmin(token)
+    if (!admin) {
+      return { code: -1, msg: '无管理权限' }
+    }
+
+    clearReadCache()
+    return { code: 0, msg: '缓存已清理' }
+  },
+
   async _verifyToken(token) {
     if (!token) return null
     try {
@@ -972,8 +1106,15 @@ module.exports = {
   },
 
   async _verifyAdmin(token) {
+    if (!token) return null
+
+    const uniAdmin = await verifyUniIdAdmin(this, token)
+    if (uniAdmin) {
+      return uniAdmin.uid || 'uni-admin'
+    }
+
     const openid = await this._verifyToken(token)
-    if (!openid || !ADMIN_OPENIDS.includes(openid)) {
+    if (!openid || !ENV_ADMIN_OPENIDS.concat(ADMIN_OPENIDS).includes(openid)) {
       return null
     }
     return openid
@@ -1312,12 +1453,18 @@ module.exports = {
       { _id: 'dish-xc-03', stallId: 'gzcc-tongde-xiaochao', name: '蒜蓉炒时蔬', category: '小炒', price: '10', vibe: '清淡', tag: '', sort: 3 }
     ]
 
+    const stallCanteenMap = new Map(stallList.map((item) => [item._id, item.canteenId]))
+
     for (const d of dishList) {
+      const canteenId = d.canteenId || stallCanteenMap.get(d.stallId) || ''
       const { data } = await dishesCollection.where({ _id: d._id }).limit(1).get()
       if (!data.length) {
-        await dishesCollection.add({ ...d, status: 'active', createdAt: now, updatedAt: now })
+        await dishesCollection.add({ ...d, canteenId, status: 'active', createdAt: now, updatedAt: now })
         dishAdded++
       } else {
+        if (canteenId && !data[0].canteenId) {
+          await dishesCollection.doc(data[0]._id).update({ canteenId, updatedAt: now })
+        }
         dishSkipped++
       }
     }

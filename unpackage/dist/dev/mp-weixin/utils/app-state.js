@@ -72,7 +72,7 @@ function safeWrite(key, value) {
   try {
     common_vendor.index.setStorageSync(key, value);
   } catch (error) {
-    common_vendor.index.__f__("warn", "at utils/app-state.js:101", "storage write failed", error);
+    common_vendor.index.__f__("warn", "at utils/app-state.js:105", "storage write failed", error);
   }
 }
 function getTodayKey() {
@@ -247,7 +247,7 @@ function applyTabBarTheme(mode) {
       }
     });
   } catch (error) {
-    common_vendor.index.__f__("warn", "at utils/app-state.js:354", "setTabBarStyle skipped", error);
+    common_vendor.index.__f__("warn", "at utils/app-state.js:358", "setTabBarStyle skipped", error);
   }
 }
 function ensureAppState() {
@@ -262,7 +262,7 @@ function ensureAppState() {
 function getAppState() {
   return ensureAppState();
 }
-function saveAppState(patch = {}) {
+function saveAppState(patch = {}, options = {}) {
   const current = ensureAppState();
   const nextState = mergeState({
     ...current,
@@ -282,7 +282,9 @@ function saveAppState(patch = {}) {
   });
   safeWrite(STATE_KEY, nextState);
   common_vendor.index.$emit("app-state-changed");
-  syncStateToCloud(nextState);
+  if (!options.skipCloudSync) {
+    syncStateToCloud(nextState);
+  }
   return nextState;
 }
 let syncStateTimer = null;
@@ -290,6 +292,10 @@ let pendingStateData = null;
 const SYNC_DEBOUNCE_MS = 3e3;
 let syncHistoryTimer = null;
 let pendingHistoryData = null;
+let syncAppDataTimer = null;
+let pendingAppStateData = null;
+let pendingAppHistoryData = null;
+const SYNC_APP_DATA_DEBOUNCE_MS = 3e3;
 const SYNC_HISTORY_DEBOUNCE_MS = 5e3;
 function syncStateToCloud(stateData) {
   if (!utils_userState.isCloudUser())
@@ -302,7 +308,7 @@ function syncStateToCloud(stateData) {
       return;
     const user = utils_userState.getUser();
     utils_cloud.cloudSyncState(user.token, pendingStateData).catch((err) => {
-      common_vendor.index.__f__("warn", "at utils/app-state.js:422", "[app-state] 状态同步云端失败", err);
+      common_vendor.index.__f__("warn", "at utils/app-state.js:432", "[app-state] 状态同步云端失败", err);
     });
     pendingStateData = null;
   }, SYNC_DEBOUNCE_MS);
@@ -318,17 +324,40 @@ function syncHistoryToCloud(historyList) {
       return;
     const user = utils_userState.getUser();
     utils_cloud.cloudSyncHistory(user.token, pendingHistoryData).catch((err) => {
-      common_vendor.index.__f__("warn", "at utils/app-state.js:439", "[app-state] 历史同步云端失败", err);
+      common_vendor.index.__f__("warn", "at utils/app-state.js:449", "[app-state] 历史同步云端失败", err);
     });
     pendingHistoryData = null;
   }, SYNC_HISTORY_DEBOUNCE_MS);
 }
+function syncAppDataToCloud(stateData, historyList) {
+  if (!utils_userState.isCloudUser())
+    return;
+  pendingAppStateData = stateData || pendingAppStateData;
+  pendingAppHistoryData = Array.isArray(historyList) ? historyList : pendingAppHistoryData;
+  if (syncAppDataTimer)
+    clearTimeout(syncAppDataTimer);
+  syncAppDataTimer = setTimeout(() => {
+    if (!pendingAppStateData && !pendingAppHistoryData)
+      return;
+    const user = utils_userState.getUser();
+    utils_cloud.cloudSyncAppData(user.token, {
+      stateData: pendingAppStateData,
+      historyList: pendingAppHistoryData
+    }).catch((err) => {
+      common_vendor.index.__f__("warn", "at utils/app-state.js:467", "[app-state] sync app data failed", err);
+    });
+    pendingAppStateData = null;
+    pendingAppHistoryData = null;
+  }, SYNC_APP_DATA_DEBOUNCE_MS);
+}
 function getHistoryList() {
   return safeRead(HISTORY_KEY, defaultHistory);
 }
-function saveHistoryList(historyList) {
+function saveHistoryList(historyList, options = {}) {
   safeWrite(HISTORY_KEY, historyList);
-  syncHistoryToCloud(historyList);
+  if (!options.skipCloudSync) {
+    syncHistoryToCloud(historyList);
+  }
 }
 function getTodayFortune(state = getAppState()) {
   const currentState = mergeState(state);
@@ -360,7 +389,7 @@ async function submitCampusApplication(formData) {
       common_vendor.index.$emit("app-state-changed");
       return record2;
     }
-    common_vendor.index.__f__("warn", "at utils/app-state.js:582", "[app-state] 云端提交申请失败，降级为本地", result.msg);
+    throw new Error(result.msg || "提交失败，请稍后再试");
   }
   const applications = getStoredApplications();
   const campusId = `campus-${Date.now()}`;
@@ -399,8 +428,7 @@ async function fetchCloudCanteens(campusName) {
     return cloudCanteensCache[campusName];
   }
   try {
-    const coCampus = common_vendor._r.importObject("co-campus");
-    const res = await coCampus.getCanteensByCampus(campusName);
+    const res = await utils_cloud.cloudGetCanteensByCampus(campusName);
     if (res.code === 0 && Array.isArray(res.data)) {
       const list = res.data.map((item) => ({
         id: item.id,
@@ -416,7 +444,7 @@ async function fetchCloudCanteens(campusName) {
     }
     throw new Error("获取失败");
   } catch (err) {
-    common_vendor.index.__f__("warn", "at utils/app-state.js:655", "[app-state] fetchCloudCanteens fallback to local", err == null ? void 0 : err.message);
+    common_vendor.index.__f__("warn", "at utils/app-state.js:685", "[app-state] fetchCloudCanteens fallback to local", err == null ? void 0 : err.message);
     return common_data.campusCanteenMap[campusName] || [];
   }
 }
@@ -431,7 +459,7 @@ let cloudMenuCache = {
   normal: null,
   campus: {}
 };
-const MENU_CACHE_TTL = 1e3 * 60 * 5;
+const MENU_CACHE_TTL = 1e3 * 60 * 10;
 function isMenuCacheFresh(cache) {
   return cache && Date.now() - cache.fetchedAt < MENU_CACHE_TTL;
 }
@@ -447,7 +475,7 @@ async function fetchNormalFoodPool(forceRefresh = false) {
       return data;
     }
   } catch (err) {
-    common_vendor.index.__f__("warn", "at utils/app-state.js:695", "[app-state] fetchNormalFoodPool error", err == null ? void 0 : err.message);
+    common_vendor.index.__f__("warn", "at utils/app-state.js:725", "[app-state] fetchNormalFoodPool error", err == null ? void 0 : err.message);
   }
   return common_data.genericFoods.map((item) => normalizeFoodCandidate(item, { source: "local-normal" }));
 }
@@ -470,7 +498,7 @@ async function fetchCampusFoodPool(state, forceRefresh = false) {
         return data;
       }
     } catch (err) {
-      common_vendor.index.__f__("warn", "at utils/app-state.js:722", "[app-state] fetchCampusFoodPool error", err == null ? void 0 : err.message);
+      common_vendor.index.__f__("warn", "at utils/app-state.js:752", "[app-state] fetchCampusFoodPool error", err == null ? void 0 : err.message);
     }
   }
   const selectedCanteenNames = canteens.map((item) => item.name).filter(Boolean);
@@ -510,9 +538,10 @@ async function drawMealResultAsync() {
     stats: {
       servedCount: state.stats.servedCount + 1
     }
-  });
+  }, { skipCloudSync: true });
   const nextHistory = [result, ...getHistoryList()].slice(0, 30);
-  saveHistoryList(nextHistory);
+  saveHistoryList(nextHistory, { skipCloudSync: true });
+  syncAppDataToCloud(nextState, nextHistory);
   return {
     exhausted: false,
     state: nextState,
@@ -562,7 +591,7 @@ async function aiPickFromCandidates({ candidates = [], state, fortune, seed = Da
       };
     }
   } catch (err) {
-    common_vendor.index.__f__("warn", "at utils/app-state.js:828", "[app-state] aiPickFromCandidates error", err == null ? void 0 : err.message);
+    common_vendor.index.__f__("warn", "at utils/app-state.js:859", "[app-state] aiPickFromCandidates error", err == null ? void 0 : err.message);
   }
   return { choice: 0, reason: fallbackReason, isAI: false };
 }
@@ -572,12 +601,17 @@ function updateLatestMealResult(result) {
     return;
   const current = ensureAppState();
   if (((_b = (_a = current.daily) == null ? void 0 : _a.lastResult) == null ? void 0 : _b.id) === result.id) {
-    saveAppState({
+    const nextState = saveAppState({
       daily: {
         ...current.daily,
         lastResult: result
       }
-    });
+    }, { skipCloudSync: true });
+    const history2 = getHistoryList();
+    const nextHistory2 = history2.map((item) => item.id === result.id ? { ...item, ...result } : item);
+    saveHistoryList(nextHistory2, { skipCloudSync: true });
+    syncAppDataToCloud(nextState, nextHistory2);
+    return;
   }
   const history = getHistoryList();
   const nextHistory = history.map((item) => item.id === result.id ? { ...item, ...result } : item);

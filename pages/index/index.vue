@@ -161,6 +161,7 @@ import { computed, ref } from 'vue'
 import { onLoad, onShow, onUnload } from '@dcloudio/uni-app'
 import { appetiteLabels, energyLevelLabels, luckLabels } from '@/common/data.js'
 import { aiPickFromCandidates, applyTabBarTheme, drawMealResultAsync, getAppState, getCampusById, getTheme, getTodayFortune, updateLatestMealResult } from '@/utils/app-state.js'
+import { requireLogin } from '@/utils/user-state.js'
 
 const statusBarHeight = uni.getWindowInfo().statusBarHeight || 20
 const state = ref(getAppState())
@@ -372,6 +373,12 @@ async function handleDrawMeal() {
 
 async function handleRequestAiPick() {
   if (isAiPicking.value || !popupResult.value) return
+  if (!requireLogin({
+    cloudOnly: true,
+    content: '登录后才能让 AI 再帮你挑一次。'
+  })) {
+    return
+  }
 
   isAiPicking.value = true
   try {

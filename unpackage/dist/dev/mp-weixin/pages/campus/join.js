@@ -9,6 +9,7 @@ const _sfc_main = {
     const state = common_vendor.ref(utils_appState.getAppState());
     const isDraftSaved = common_vendor.ref(false);
     const privacyAgreed = common_vendor.ref(false);
+    const isSubmitting = common_vendor.ref(false);
     const showCityPicker = common_vendor.ref(false);
     const customCity = common_vendor.ref("");
     const form = common_vendor.reactive({
@@ -126,6 +127,9 @@ const _sfc_main = {
       return true;
     }
     async function submitForm() {
+      if (isSubmitting.value) {
+        return;
+      }
       if (!validateForm()) {
         return;
       }
@@ -138,23 +142,38 @@ const _sfc_main = {
         });
         return;
       }
-      await utils_appState.submitCampusApplication({
-        campusName: form.campusName,
-        campusTag: form.campusTag,
-        city: form.city,
-        contactName: form.nickName,
-        contactPhone: form.email
-      });
-      utils_appState.clearCampusApplicationDraft();
-      const cloudMode = utils_userState.isCloudUser();
-      common_vendor.index.showToast({
-        title: cloudMode ? "已提交到后台，待审核" : "仅保存到本地，未连接后台",
-        icon: "none",
-        duration: 2500
-      });
-      setTimeout(() => {
-        common_vendor.index.navigateBack();
-      }, 500);
+      if (!utils_userState.requireLogin({
+        cloudOnly: true,
+        content: "登录后才能把入驻申请提交到后台。"
+      })) {
+        return;
+      }
+      isSubmitting.value = true;
+      try {
+        await utils_appState.submitCampusApplication({
+          campusName: form.campusName,
+          campusTag: form.campusTag,
+          city: form.city,
+          contactName: form.nickName,
+          contactPhone: form.email
+        });
+        utils_appState.clearCampusApplicationDraft();
+        common_vendor.index.showToast({
+          title: "已提交到后台，待审核",
+          icon: "none",
+          duration: 2500
+        });
+        setTimeout(() => {
+          common_vendor.index.navigateBack();
+        }, 500);
+      } catch (err) {
+        common_vendor.index.showToast({
+          title: (err == null ? void 0 : err.message) || "提交失败，请稍后再试",
+          icon: "none"
+        });
+      } finally {
+        isSubmitting.value = false;
+      }
     }
     function goBack() {
       common_vendor.index.navigateBack();
@@ -191,20 +210,22 @@ const _sfc_main = {
         t: common_vendor.o(openPrivacyPolicy, "63"),
         v: common_vendor.o(openUserAgreement, "29"),
         w: common_vendor.o(($event) => privacyAgreed.value = !privacyAgreed.value, "22"),
-        x: common_vendor.t(isDraftSaved.value ? "提交到后台" : "保存申请内容"),
+        x: common_vendor.t(isSubmitting.value ? "提交中..." : isDraftSaved.value ? "提交到后台" : "保存申请内容"),
         y: common_vendor.s(accentFillStyle.value),
-        z: common_vendor.o(submitForm, "64"),
-        A: showCityPicker.value
+        z: isSubmitting.value,
+        A: isSubmitting.value,
+        B: common_vendor.o(submitForm, "b6"),
+        C: showCityPicker.value
       }, showCityPicker.value ? {
-        B: common_vendor.o(($event) => showCityPicker.value = false, "a5"),
-        C: common_vendor.o(confirmCustomCity, "fb"),
-        D: customCity.value,
-        E: common_vendor.o(($event) => customCity.value = $event.detail.value, "40"),
-        F: common_vendor.s(accentFillStyle.value),
-        G: common_vendor.o(confirmCustomCity, "40"),
-        H: common_vendor.o(() => {
-        }, "9c"),
-        I: common_vendor.f(cityGroups, (group, gi, i0) => {
+        D: common_vendor.o(($event) => showCityPicker.value = false, "b4"),
+        E: common_vendor.o(confirmCustomCity, "3a"),
+        F: customCity.value,
+        G: common_vendor.o(($event) => customCity.value = $event.detail.value, "c3"),
+        H: common_vendor.s(accentFillStyle.value),
+        I: common_vendor.o(confirmCustomCity, "63"),
+        J: common_vendor.o(() => {
+        }, "5e"),
+        K: common_vendor.f(cityGroups, (group, gi, i0) => {
           return {
             a: common_vendor.t(group.label),
             b: common_vendor.f(group.cities, (city, ci, i1) => {
@@ -219,12 +240,12 @@ const _sfc_main = {
             c: gi
           };
         }),
-        J: common_vendor.s(cardStyle.value),
-        K: common_vendor.o(() => {
-        }, "c8"),
-        L: common_vendor.o(($event) => showCityPicker.value = false, "61")
+        L: common_vendor.s(cardStyle.value),
+        M: common_vendor.o(() => {
+        }, "b6"),
+        N: common_vendor.o(($event) => showCityPicker.value = false, "02")
       } : {}, {
-        M: common_vendor.s(pageStyle.value)
+        O: common_vendor.s(pageStyle.value)
       });
     };
   }

@@ -38,21 +38,46 @@
 import { computed, ref } from 'vue'
 import { onLoad, onShow } from '@dcloudio/uni-app'
 import { getAppState, getHistoryList, getTheme } from '@/utils/app-state.js'
+import { requireLogin } from '@/utils/user-state.js'
 
 const statusBarHeight = uni.getWindowInfo().statusBarHeight || 20
 const state = ref(getAppState())
-const historyList = ref(getHistoryList())
+const historyList = ref([])
+let hasPromptedLogin = false
 
 const refreshData = () => {
   state.value = getAppState()
   historyList.value = getHistoryList()
 }
 
+function ensureHistoryLogin() {
+  const passed = requireLogin({
+    content: '登录后才能查看你的历史记录。',
+    redirect: !hasPromptedLogin
+  })
+
+  if (passed) {
+    hasPromptedLogin = false
+    return true
+  }
+
+  hasPromptedLogin = true
+  return false
+}
+
 onLoad(() => {
+  if (!ensureHistoryLogin()) {
+    return
+  }
+
   refreshData()
 })
 
 onShow(() => {
+  if (!ensureHistoryLogin()) {
+    return
+  }
+
   refreshData()
 })
 

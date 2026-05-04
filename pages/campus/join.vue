@@ -142,7 +142,7 @@ import {
   saveCampusApplicationDraft,
   submitCampusApplication
 } from '@/utils/app-state.js'
-import { isCloudUser } from '@/utils/user-state.js'
+import { requireLogin } from '@/utils/user-state.js'
 
 const statusBarHeight = uni.getWindowInfo().statusBarHeight || 20
 const state = ref(getAppState())
@@ -303,6 +303,13 @@ async function submitForm() {
     return
   }
 
+  if (!requireLogin({
+    cloudOnly: true,
+    content: '登录后才能把入驻申请提交到后台。'
+  })) {
+    return
+  }
+
   isSubmitting.value = true
   try {
     await submitCampusApplication({
@@ -314,9 +321,8 @@ async function submitForm() {
     })
     clearCampusApplicationDraft()
 
-    const cloudMode = isCloudUser()
     uni.showToast({
-      title: cloudMode ? '已提交到后台，待审核' : '仅保存到本地，未连接后台',
+      title: '已提交到后台，待审核',
       icon: 'none',
       duration: 2500
     })

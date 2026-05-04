@@ -81,9 +81,9 @@
         <view class="row-item press-feedback" hover-class="press-feedback--active" hover-start-time="20" hover-stay-time="90" @click="goJoinPage">
           <view>
             <text class="row-title">📝 校园入驻申请</text>
-            <text class="row-desc">该功能正在开发中，敬请期待。</text>
+            <text class="row-desc">提交你的校园信息，审核通过后就能加入校园版。</text>
           </view>
-          <view class="count-badge" :style="accentFillStyle">待开放</view>
+          <text class="row-action" :style="accentTextStyle">申请</text>
         </view>
       </view>
 
@@ -272,7 +272,7 @@ import {
   getTheme,
   saveAppState
 } from '@/utils/app-state.js'
-import { getUser, saveUser, clearUser, handleLogin as cloudLogin, isCloudUser, syncProfileToCloud } from '@/utils/user-state.js'
+import { getUser, saveUser, clearUser, consumeLoginIntent, handleLogin as cloudLogin, isCloudUser, requireLogin, syncProfileToCloud } from '@/utils/user-state.js'
 
 const statusBarHeight = uni.getWindowInfo().statusBarHeight || 20
 const menuButtonRect = typeof uni.getMenuButtonBoundingClientRect === 'function'
@@ -304,6 +304,12 @@ function refreshState() {
   applyTabBarTheme(state.value.mode)
 }
 
+function openLoginSheetIfNeeded() {
+  if (!isCloudUser() && consumeLoginIntent()) {
+    showLoginSheet.value = true
+  }
+}
+
 function onUserStateChange() {
   user.value = getUser()
   refreshState()
@@ -311,11 +317,15 @@ function onUserStateChange() {
 
 onLoad(() => {
   refreshState()
+  openLoginSheetIfNeeded()
   uni.$on('user-state-changed', onUserStateChange)
   uni.$on('app-state-changed', refreshState)
 })
 
-onShow(refreshState)
+onShow(() => {
+  refreshState()
+  openLoginSheetIfNeeded()
+})
 
 onUnload(() => {
   uni.$off('user-state-changed', onUserStateChange)
@@ -599,6 +609,10 @@ function goCampusPage() {
 }
 
 function goHistoryPage() {
+  if (!requireLogin({ content: '登录后才能查看你的历史记录。' })) {
+    return
+  }
+
   uni.navigateTo({ url: '/pages/history/index' })
 }
 
@@ -611,7 +625,14 @@ function goServicePage() {
 }
 
 function goJoinPage() {
-  uni.showToast({ title: '校园入驻功能待开放', icon: 'none' })
+  if (!requireLogin({
+    cloudOnly: true,
+    content: '登录后才能提交校园入驻申请。'
+  })) {
+    return
+  }
+
+  uni.navigateTo({ url: '/pages/campus/join' })
 }
 
 function goPrivacyPolicy() {
