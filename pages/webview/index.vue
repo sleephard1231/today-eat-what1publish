@@ -8,16 +8,24 @@
     <view class="content-wrap">
       <rich-text :nodes="content" />
     </view>
+    <button
+      v-if="isPrivacyPage"
+      class="agree-button"
+      @click="handleAgreePrivacy"
+    >同意并继续</button>
   </view>
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
+import { agreePrivacy } from '@/utils/privacy-state.js'
 
 const statusBarHeight = uni.getWindowInfo().statusBarHeight || 20
 const pageTitle = ref('')
 const content = ref('')
+const currentType = ref('privacy')
+const isPrivacyPage = computed(() => currentType.value === 'privacy')
 
 const privacyContent = `
 <h2 style="font-size:18px;font-weight:700;margin-bottom:16px;">隐私政策</h2>
@@ -89,6 +97,7 @@ const agreementContent = `
 
 onLoad((options) => {
   const type = options?.url || 'privacy'
+  currentType.value = type
   if (type === 'privacy') {
     pageTitle.value = '隐私政策'
     content.value = privacyContent
@@ -100,6 +109,14 @@ onLoad((options) => {
 
 function goBack() {
   uni.navigateBack()
+}
+
+function handleAgreePrivacy() {
+  agreePrivacy()
+  uni.showToast({ title: '已同意', icon: 'none' })
+  setTimeout(() => {
+    uni.navigateBack()
+  }, 300)
 }
 </script>
 
@@ -127,5 +144,16 @@ function goBack() {
 }
 .content-wrap {
   padding: 24rpx 32rpx 60rpx;
+}
+.agree-button {
+  width: calc(100% - 64rpx);
+  height: 88rpx;
+  margin: 0 32rpx 48rpx;
+  border-radius: 28rpx;
+  background: linear-gradient(135deg, #ff9a5c 0%, #ff7a2f 100%);
+  color: #ffffff;
+  font-size: 30rpx;
+  font-weight: 700;
+  line-height: 88rpx;
 }
 </style>

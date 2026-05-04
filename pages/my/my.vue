@@ -272,7 +272,8 @@ import {
   getTheme,
   saveAppState
 } from '@/utils/app-state.js'
-import { getUser, saveUser, clearUser, consumeLoginIntent, handleLogin as cloudLogin, isCloudUser, requireLogin, syncProfileToCloud } from '@/utils/user-state.js'
+import { requirePrivacyAgreement } from '@/utils/privacy-state.js'
+import { getUser, saveUser, clearUser, consumeLoginIntent, handleLogin as cloudLogin, isCloudUser, requireLogin, syncProfileToCloud, uploadAvatarToCloud } from '@/utils/user-state.js'
 
 const statusBarHeight = uni.getWindowInfo().statusBarHeight || 20
 const menuButtonRect = typeof uni.getMenuButtonBoundingClientRect === 'function'
@@ -467,6 +468,11 @@ function onNicknameInput(e) {
 
 async function handleLogin() {
   if (isLoggingIn.value) return
+  if (!requirePrivacyAgreement({
+    content: '同意隐私政策和用户协议后，才能继续登录。'
+  })) {
+    return
+  }
 
   if (!loginForm.nickname.trim()) {
     uni.showToast({ title: '请填写昵称', icon: 'none' })
@@ -475,10 +481,15 @@ async function handleLogin() {
 
   isLoggingIn.value = true
   try {
+    const avatar = await uploadAvatarToCloud(loginForm.avatar)
+    if (loginForm.avatar && !avatar) {
+      uni.showToast({ title: '头像上传失败，请重新选择', icon: 'none' })
+      return
+    }
     // 优先云端登录，失败自动降级为本地登录
     const result = await cloudLogin({
       nickname: loginForm.nickname.trim(),
-      avatar: loginForm.avatar
+      avatar
     })
 
     const loginMode = result.loginMode || 'local'
@@ -488,7 +499,7 @@ async function handleLogin() {
     saveAppState({
       profile: {
         nickname: loginForm.nickname.trim(),
-        avatar: loginForm.avatar,
+        avatar,
         openId: data.openid || ''
       }
     })
@@ -528,11 +539,17 @@ function handleLogout() {
 function onChooseAvatarEdit(e) {
   const avatarUrl = e.detail.avatarUrl
   if (avatarUrl) {
-    saveUser({ avatar: avatarUrl })
-    saveAppState({ profile: { avatar: avatarUrl } })
-    syncProfileToCloud({ avatar: avatarUrl })
-    user.value = getUser()
-    uni.showToast({ title: '头像已更新', icon: 'none' })
+    uploadAvatarToCloud(avatarUrl).then((avatar) => {
+      if (!avatar) {
+        uni.showToast({ title: '头像上传失败，请重新选择', icon: 'none' })
+        return
+      }
+      saveUser({ avatar })
+      saveAppState({ profile: { avatar } })
+      syncProfileToCloud({ avatar })
+      user.value = getUser()
+      uni.showToast({ title: '头像已更新', icon: 'none' })
+    })
   }
 }
 

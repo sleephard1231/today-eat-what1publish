@@ -142,6 +142,7 @@ import {
   saveCampusApplicationDraft,
   submitCampusApplication
 } from '@/utils/app-state.js'
+import { requirePrivacyAgreement } from '@/utils/privacy-state.js'
 import { requireLogin } from '@/utils/user-state.js'
 
 const statusBarHeight = uni.getWindowInfo().statusBarHeight || 20
@@ -292,6 +293,12 @@ async function submitForm() {
     return
   }
 
+  if (!requirePrivacyAgreement({
+    content: '同意隐私政策和用户协议后，才能提交校园入驻申请。'
+  })) {
+    return
+  }
+
   if (!isDraftSaved.value) {
     saveCampusApplicationDraft({ ...form })
     isDraftSaved.value = true
@@ -317,7 +324,7 @@ async function submitForm() {
       campusTag: form.campusTag,
       city: form.city,
       contactName: form.nickName,
-      contactPhone: form.email
+      contactEmail: form.email
     })
     clearCampusApplicationDraft()
 

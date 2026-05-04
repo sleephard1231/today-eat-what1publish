@@ -161,6 +161,7 @@ import { computed, ref } from 'vue'
 import { onLoad, onShow, onUnload } from '@dcloudio/uni-app'
 import { appetiteLabels, energyLevelLabels, luckLabels } from '@/common/data.js'
 import { aiPickFromCandidates, applyTabBarTheme, drawMealResultAsync, getAppState, getCampusById, getTheme, getTodayFortune, updateLatestMealResult } from '@/utils/app-state.js'
+import { requirePrivacyAgreement } from '@/utils/privacy-state.js'
 import { requireLogin } from '@/utils/user-state.js'
 
 const statusBarHeight = uni.getWindowInfo().statusBarHeight || 20
@@ -344,6 +345,11 @@ function applyAiPick(aiPick, candidates) {
 
 async function handleDrawMeal() {
   if (isDrawing.value) return
+  if (!requirePrivacyAgreement({
+    content: '同意隐私政策和用户协议后，才能为你保存推荐状态和历史记录。'
+  })) {
+    return
+  }
 
   clearRevealTimers()
   showResultPopup.value = false
@@ -373,6 +379,11 @@ async function handleDrawMeal() {
 
 async function handleRequestAiPick() {
   if (isAiPicking.value || !popupResult.value) return
+  if (!requirePrivacyAgreement({
+    content: '同意隐私政策和用户协议后，才能使用 AI 推荐。'
+  })) {
+    return
+  }
   if (!requireLogin({
     cloudOnly: true,
     content: '登录后才能让 AI 再帮你挑一次。'

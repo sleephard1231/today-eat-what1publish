@@ -31,6 +31,8 @@ const APPLICATION_DAILY_LIMIT = 3
 const APPLICATION_PENDING_LIMIT = 5
 const READ_CACHE_TTL = 5 * 60 * 1000
 const readCache = new Map()
+const EMAIL_MASK_RE = /^(.{1,2})(.*)(@.*)$/
+const CONTACT_EMAIL_SECRET = process.env.CONTACT_EMAIL_SECRET || 'change-me-before-launch'
 
 function getReadCache(key) {
   const cached = readCache.get(key)
@@ -91,11 +93,38 @@ function getDayStartTimestamp() {
   return date.getTime()
 }
 
+function maskEmail(email = '') {
+  const value = String(email || '').trim()
+  if (!value || !value.includes('@')) return ''
+  return value.replace(EMAIL_MASK_RE, (match, prefix, middle, suffix) => {
+    const mask = middle ? '*'.repeat(Math.min(Math.max(middle.length, 2), 6)) : '**'
+    return `${prefix}${mask}${suffix}`
+  })
+}
+
+function encodeSensitiveText(value = '') {
+  const crypto = require('crypto')
+  const iv = crypto.randomBytes(12)
+  const key = crypto.createHash('sha256').update(CONTACT_EMAIL_SECRET).digest()
+  const cipher = crypto.createCipheriv('aes-256-gcm', key, iv)
+  const encrypted = Buffer.concat([
+    cipher.update(String(value || ''), 'utf8'),
+    cipher.final()
+  ])
+  const tag = cipher.getAuthTag()
+  return [
+    'v1',
+    iv.toString('base64'),
+    tag.toString('base64'),
+    encrypted.toString('base64')
+  ].join(':')
+}
+
 module.exports = {
   /**
    * 提交校园入驻申请
    * @param {string} token
-   * @param {object} formData - { campusName, campusTag, city, contactName, contactPhone }
+   * @param {object} formData - { campusName, campusTag, city, contactName, contactEmail }
    * @returns {{ code: number, data?: object, msg?: string }}
    */
   async submitApplication(token, formData = {}) {
@@ -104,7 +133,9 @@ module.exports = {
       return { code: -1, msg: '请先登录' }
     }
 
-    if (!formData.campusName || !formData.contactPhone) {
+    const contactEmail = String(formData.contactEmail || formData.contactPhone || '').trim()
+
+    if (!formData.campusName || !contactEmail) {
       return { code: -1, msg: '请至少填写校园名称和邮箱' }
     }
 
@@ -131,7 +162,7 @@ module.exports = {
     try {
       const coContent = uniCloud.importObject('co-content')
       const checkResult = await coContent.checkText(
-        [formData.campusName, formData.campusTag, formData.contactName, formData.contactPhone].filter(Boolean).join(' '),
+        [formData.campusName, formData.campusTag, formData.contactName, contactEmail].filter(Boolean).join(' '),
         1,
         openid
       )
@@ -156,6 +187,8 @@ module.exports = {
 
     const campusId = `campus-${Date.now()}`
     const now = Date.now()
+    const contactEmailMasked = maskEmail(contactEmail)
+    const contactEmailEncrypted = encodeSensitiveText(contactEmail)
 
     const addRes = await applicationsCollection.add({
       openid,
@@ -164,7 +197,8 @@ module.exports = {
       campusTag: formData.campusTag || '',
       city: formData.city || '',
       contactName: formData.contactName || '',
-      contactPhone: formData.contactPhone || '',
+      contactEmail: contactEmailEncrypted,
+      contactEmailMasked,
       status: '待审核',
       reviewNote: '',
       reviewedBy: '',
@@ -207,6 +241,7 @@ module.exports = {
         campusName: app.campusName,
         campusTag: app.campusTag,
         city: app.city,
+        contactEmailMasked: app.contactEmailMasked || '',
         status: app.status,
         createdAt: this._formatTimestamp(app.createdAt)
       }))

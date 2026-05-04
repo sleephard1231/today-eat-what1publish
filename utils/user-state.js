@@ -11,6 +11,7 @@ import { cloudWxLogin, cloudGetProfile, cloudUpdateProfile, isCloudAvailable } f
 
 const USER_KEY = 'eat-what-user'
 const LOGIN_INTENT_KEY = 'eat-what-login-intent'
+const CLOUD_FILE_PREFIX = 'cloud://'
 
 const defaultUser = {
   openId: '',
@@ -39,6 +40,10 @@ function safeWrite(key, value) {
   }
 }
 
+function isTempAvatarPath(path = '') {
+  return Boolean(path) && !path.startsWith(CLOUD_FILE_PREFIX) && !/^https?:\/\//.test(path)
+}
+
 export function getUser() {
   return safeRead(USER_KEY, defaultUser)
 }
@@ -55,6 +60,27 @@ export function saveUser(user) {
 export function clearUser() {
   safeWrite(USER_KEY, { ...defaultUser })
   uni.$emit('user-state-changed')
+}
+
+export async function uploadAvatarToCloud(tempFilePath = '') {
+  if (!isTempAvatarPath(tempFilePath)) {
+    return tempFilePath
+  }
+
+  try {
+    const extMatch = tempFilePath.match(/\.(jpg|jpeg|png|webp)$/i)
+    const ext = extMatch ? extMatch[1].toLowerCase() : 'jpg'
+    const cloudPath = `avatars/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`
+    const result = await uniCloud.uploadFile({
+      filePath: tempFilePath,
+      cloudPath
+    })
+
+    return result.fileID || tempFilePath
+  } catch (error) {
+    console.warn('[user-state] upload avatar failed', error)
+    return ''
+  }
 }
 
 export function consumeLoginIntent() {
