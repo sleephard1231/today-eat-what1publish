@@ -4,7 +4,9 @@
       "WebFetch(domain:minimax-algeng-chat-tts.oss-cn-wulanchabu.aliyuncs.com)",
       "Bash(git *)",
       "Bash(claude *)",
-      "Bash(npm view *)"
+      "Bash(npm view *)",
+      "Bash(xxd)",
+      "Bash(node -e ' *)"
     ]
   }
 }

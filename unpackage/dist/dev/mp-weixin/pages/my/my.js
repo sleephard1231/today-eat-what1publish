@@ -22,6 +22,7 @@ const _sfc_main = {
       avatar: "",
       nickname: ""
     });
+    const loginAgreementChecked = common_vendor.ref(utils_privacyState.hasAgreedPrivacy());
     const pendingMbti = common_vendor.ref(state.value.profile.mbti);
     const pendingZodiac = common_vendor.ref(state.value.profile.zodiac);
     function refreshState() {
@@ -29,6 +30,7 @@ const _sfc_main = {
       user.value = utils_userState.getUser();
       historyCount.value = utils_appState.getHistoryList().length;
       applicationCount.value = utils_appState.getCampusApplications().length;
+      loginAgreementChecked.value = utils_privacyState.hasAgreedPrivacy();
       pendingMbti.value = state.value.profile.mbti;
       pendingZodiac.value = state.value.profile.zodiac;
       utils_appState.applyTabBarTheme(state.value.mode);
@@ -42,6 +44,7 @@ const _sfc_main = {
       user.value = utils_userState.getUser();
       refreshState();
     }
+    let hasLoaded = false;
     common_vendor.onLoad(() => {
       refreshState();
       openLoginSheetIfNeeded();
@@ -49,6 +52,10 @@ const _sfc_main = {
       common_vendor.index.$on("app-state-changed", refreshState);
     });
     common_vendor.onShow(() => {
+      if (!hasLoaded) {
+        hasLoaded = true;
+        return;
+      }
       refreshState();
       openLoginSheetIfNeeded();
     });
@@ -122,6 +129,17 @@ const _sfc_main = {
       color: theme.value.accent,
       border: `1px solid ${theme.value.border}`
     }));
+    const canSubmitLogin = common_vendor.computed(() => Boolean(loginAgreementChecked.value && loginForm.nickname.trim()));
+    const disabledLoginButtonStyle = common_vendor.computed(() => ({
+      background: "#f0d8c6",
+      color: "rgba(255,255,255,0.9)",
+      boxShadow: "none"
+    }));
+    const loginAgreementCheckStyle = common_vendor.computed(() => ({
+      border: `1px solid ${theme.value.border}`,
+      background: "rgba(255,255,255,0.82)",
+      color: theme.value.accent
+    }));
     const loginModeTextStyle = common_vendor.computed(() => ({
       color: loginStatus.value.isCloudUser ? theme.value.accent : "#c78357"
     }));
@@ -166,17 +184,17 @@ const _sfc_main = {
     function onNicknameInput(e) {
       loginForm.nickname = e.detail.value || "";
     }
+    function toggleLoginAgreement() {
+      loginAgreementChecked.value = !loginAgreementChecked.value;
+    }
     async function handleLogin() {
       if (isLoggingIn.value)
         return;
-      if (!utils_privacyState.requirePrivacyAgreement({
-        content: "同意隐私政策和用户协议后，才能继续登录。"
-      })) {
+      if (!canSubmitLogin.value) {
         return;
       }
-      if (!loginForm.nickname.trim()) {
-        common_vendor.index.showToast({ title: "请填写昵称", icon: "none" });
-        return;
+      if (!utils_privacyState.hasAgreedPrivacy()) {
+        utils_privacyState.agreePrivacy();
       }
       isLoggingIn.value = true;
       try {
@@ -213,7 +231,7 @@ const _sfc_main = {
           });
         }
       } catch (error) {
-        common_vendor.index.__f__("warn", "at pages/my/my.vue:545", "handleLogin failed", error);
+        common_vendor.index.__f__("warn", "at pages/my/my.vue:577", "handleLogin failed", error);
         common_vendor.index.showToast({ title: "登录失败，请重试", icon: "none" });
       } finally {
         isLoggingIn.value = false;
@@ -420,46 +438,52 @@ const _sfc_main = {
         ad: common_vendor.o(onChooseAvatar, "be"),
         ae: loginForm.nickname,
         af: common_vendor.o(onNicknameInput, "b6"),
-        ag: common_vendor.t(isLoggingIn.value ? "登录中..." : "登录"),
-        ah: common_vendor.s(accentFillStyle.value),
-        ai: isLoggingIn.value,
-        aj: common_vendor.o(handleLogin, "20"),
-        ak: common_vendor.s(sheetStyle.value),
-        al: common_vendor.o(() => {
+        ag: common_vendor.t(loginAgreementChecked.value ? "✓" : ""),
+        ah: common_vendor.s(loginAgreementChecked.value ? accentFillStyle.value : loginAgreementCheckStyle.value),
+        ai: common_vendor.o(goPrivacyPolicy, "87"),
+        aj: common_vendor.o(goUserAgreement, "13"),
+        ak: common_vendor.o(toggleLoginAgreement, "9d"),
+        al: common_vendor.t(isLoggingIn.value ? "登录中..." : "登录"),
+        am: common_vendor.s(canSubmitLogin.value ? accentFillStyle.value : disabledLoginButtonStyle.value),
+        an: isLoggingIn.value,
+        ao: !canSubmitLogin.value || isLoggingIn.value,
+        ap: common_vendor.o(handleLogin, "40"),
+        aq: common_vendor.s(sheetStyle.value),
+        ar: common_vendor.o(() => {
         }, "5c"),
-        am: common_vendor.o(closeLoginSheet, "88")
+        as: common_vendor.o(closeLoginSheet, "88")
       }) : {}, {
-        an: showProfileSheet.value
+        at: showProfileSheet.value
       }, showProfileSheet.value ? common_vendor.e({
-        ao: user.value.avatar
+        av: user.value.avatar
       }, user.value.avatar ? {
-        ap: user.value.avatar
+        aw: user.value.avatar
       } : {
-        aq: common_vendor.s(accentFillStyle.value)
+        ax: common_vendor.s(accentFillStyle.value)
       }, {
-        ar: common_vendor.o(onChooseAvatarEdit, "42"),
-        as: user.value.nickname,
-        at: common_vendor.o(onNicknameEdit, "25"),
-        av: common_vendor.t(currentMbtiCard.value.emoji),
-        aw: common_vendor.t(currentMbtiCard.value.value),
-        ax: common_vendor.t(currentMbtiCard.value.funAlias),
-        ay: common_vendor.s(pickerChipStyle.value),
-        az: common_vendor.o(openMbtiPopupFromSheet, "28"),
-        aA: common_vendor.t(currentZodiacCard.value.emoji),
-        aB: common_vendor.t(currentZodiacCard.value.value),
-        aC: common_vendor.t(currentZodiacCard.value.funAlias),
-        aD: common_vendor.s(pickerChipStyle.value),
-        aE: common_vendor.o(openZodiacPopupFromSheet, "c6"),
-        aF: common_vendor.s(ghostButtonStyle.value),
-        aG: common_vendor.o(handleLogout, "9c"),
-        aH: common_vendor.s(sheetStyle.value),
-        aI: common_vendor.o(() => {
-        }, "87"),
-        aJ: common_vendor.o(closeProfileSheet, "26")
+        ay: common_vendor.o(onChooseAvatarEdit, "9b"),
+        az: user.value.nickname,
+        aA: common_vendor.o(onNicknameEdit, "79"),
+        aB: common_vendor.t(currentMbtiCard.value.emoji),
+        aC: common_vendor.t(currentMbtiCard.value.value),
+        aD: common_vendor.t(currentMbtiCard.value.funAlias),
+        aE: common_vendor.s(pickerChipStyle.value),
+        aF: common_vendor.o(openMbtiPopupFromSheet, "24"),
+        aG: common_vendor.t(currentZodiacCard.value.emoji),
+        aH: common_vendor.t(currentZodiacCard.value.value),
+        aI: common_vendor.t(currentZodiacCard.value.funAlias),
+        aJ: common_vendor.s(pickerChipStyle.value),
+        aK: common_vendor.o(openZodiacPopupFromSheet, "84"),
+        aL: common_vendor.s(ghostButtonStyle.value),
+        aM: common_vendor.o(handleLogout, "30"),
+        aN: common_vendor.s(sheetStyle.value),
+        aO: common_vendor.o(() => {
+        }, "02"),
+        aP: common_vendor.o(closeProfileSheet, "80")
       }) : {}, {
-        aK: showMbtiPopup.value
+        aQ: showMbtiPopup.value
       }, showMbtiPopup.value ? {
-        aL: common_vendor.f(common_vendor.unref(common_data.mbtiCardOptions), (item, index, i0) => {
+        aR: common_vendor.f(common_vendor.unref(common_data.mbtiCardOptions), (item, index, i0) => {
           return {
             a: common_vendor.t(item.emoji),
             b: common_vendor.t(item.value),
@@ -474,17 +498,17 @@ const _sfc_main = {
             k: common_vendor.o(($event) => pendingMbti.value = item.value, item.value)
           };
         }),
-        aM: common_vendor.o(cancelMbtiSelection, "f7"),
-        aN: common_vendor.s(accentFillStyle.value),
-        aO: common_vendor.o(confirmMbtiSelection, "23"),
-        aP: common_vendor.s(sheetStyle.value),
-        aQ: common_vendor.o(() => {
-        }, "53"),
-        aR: common_vendor.o(cancelMbtiSelection, "88")
+        aS: common_vendor.o(cancelMbtiSelection, "81"),
+        aT: common_vendor.s(accentFillStyle.value),
+        aU: common_vendor.o(confirmMbtiSelection, "78"),
+        aV: common_vendor.s(sheetStyle.value),
+        aW: common_vendor.o(() => {
+        }, "65"),
+        aX: common_vendor.o(cancelMbtiSelection, "52")
       } : {}, {
-        aS: showZodiacPopup.value
+        aY: showZodiacPopup.value
       }, showZodiacPopup.value ? {
-        aT: common_vendor.f(common_vendor.unref(common_data.zodiacCardOptions), (item, index, i0) => {
+        aZ: common_vendor.f(common_vendor.unref(common_data.zodiacCardOptions), (item, index, i0) => {
           return {
             a: common_vendor.t(item.emoji),
             b: common_vendor.t(item.value),
@@ -499,15 +523,15 @@ const _sfc_main = {
             k: common_vendor.o(($event) => pendingZodiac.value = item.value, item.value)
           };
         }),
-        aU: common_vendor.o(cancelZodiacSelection, "f3"),
-        aV: common_vendor.s(accentFillStyle.value),
-        aW: common_vendor.o(confirmZodiacSelection, "25"),
-        aX: common_vendor.s(sheetStyle.value),
-        aY: common_vendor.o(() => {
-        }, "5f"),
-        aZ: common_vendor.o(cancelZodiacSelection, "79")
+        ba: common_vendor.o(cancelZodiacSelection, "51"),
+        bb: common_vendor.s(accentFillStyle.value),
+        bc: common_vendor.o(confirmZodiacSelection, "74"),
+        bd: common_vendor.s(sheetStyle.value),
+        be: common_vendor.o(() => {
+        }, "f0"),
+        bf: common_vendor.o(cancelZodiacSelection, "9a")
       } : {}, {
-        ba: common_vendor.s(pageStyle.value)
+        bg: common_vendor.s(pageStyle.value)
       });
     };
   }

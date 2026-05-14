@@ -8,7 +8,7 @@
  */
 
 // 鈿狅笍 涓婄嚎鍓嶅繀椤诲～鍏ョ鐞嗗憳 openid
-const ADMIN_OPENIDS = [] // 濡?['oXXXXXXXXXXXX']
+const ADMIN_OPENIDS = ['oxKFC3UzlxECsob71tnJsRgCVY1E'] // 濡?['oXXXXXXXXXXXX']
 const ENV_ADMIN_OPENIDS = String(process.env.ADMIN_OPENIDS || '')
   .split(',')
   .map((openid) => openid.trim())
@@ -422,10 +422,10 @@ module.exports = {
    * 鑾峰彇宸插叆椹绘牎鍥垪琛紙鍏紑鎺ュ彛锛屾棤闇€鐧诲綍锛?
    * @returns {{ code: number, data?: Array, msg?: string }}
    */
-  async getApprovedCampuses() {
-    const cacheKey = 'approvedCampuses'
-    const cached = getReadCache(cacheKey)
-    if (cached) return cached
+  async getApprovedCampuses(page = 1, pageSize = 50) {
+    const safePage = Math.max(1, Number(page) || 1)
+    const safeSize = Math.min(100, Math.max(1, Number(pageSize) || 50))
+    const offset = (safePage - 1) * safeSize
 
     // 浠?applications 鍙栧凡閫氳繃鐨?    const { data: approvedApps } = await applicationsCollection
       .where({ status: '宸查€氳繃' })

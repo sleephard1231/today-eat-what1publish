@@ -72,7 +72,7 @@ function safeWrite(key, value) {
   try {
     common_vendor.index.setStorageSync(key, value);
   } catch (error) {
-    common_vendor.index.__f__("warn", "at utils/app-state.js:105", "storage write failed", error);
+    common_vendor.index.__f__("warn", "at utils/app-state.js:106", "storage write failed", error);
   }
 }
 function getTodayKey() {
@@ -247,7 +247,7 @@ function applyTabBarTheme(mode) {
       }
     });
   } catch (error) {
-    common_vendor.index.__f__("warn", "at utils/app-state.js:358", "setTabBarStyle skipped", error);
+    common_vendor.index.__f__("warn", "at utils/app-state.js:359", "setTabBarStyle skipped", error);
   }
 }
 function ensureAppState() {
@@ -308,7 +308,7 @@ function syncStateToCloud(stateData) {
       return;
     const user = utils_userState.getUser();
     utils_cloud.cloudSyncState(user.token, pendingStateData).catch((err) => {
-      common_vendor.index.__f__("warn", "at utils/app-state.js:432", "[app-state] 状态同步云端失败", err);
+      common_vendor.index.__f__("warn", "at utils/app-state.js:433", "[app-state] 状态同步云端失败", err);
     });
     pendingStateData = null;
   }, SYNC_DEBOUNCE_MS);
@@ -324,7 +324,7 @@ function syncHistoryToCloud(historyList) {
       return;
     const user = utils_userState.getUser();
     utils_cloud.cloudSyncHistory(user.token, pendingHistoryData).catch((err) => {
-      common_vendor.index.__f__("warn", "at utils/app-state.js:449", "[app-state] 历史同步云端失败", err);
+      common_vendor.index.__f__("warn", "at utils/app-state.js:450", "[app-state] 历史同步云端失败", err);
     });
     pendingHistoryData = null;
   }, SYNC_HISTORY_DEBOUNCE_MS);
@@ -344,7 +344,7 @@ function syncAppDataToCloud(stateData, historyList) {
       stateData: pendingAppStateData,
       historyList: pendingAppHistoryData
     }).catch((err) => {
-      common_vendor.index.__f__("warn", "at utils/app-state.js:467", "[app-state] sync app data failed", err);
+      common_vendor.index.__f__("warn", "at utils/app-state.js:468", "[app-state] sync app data failed", err);
     });
     pendingAppStateData = null;
     pendingAppHistoryData = null;
@@ -434,7 +434,7 @@ async function fetchCloudCanteens(campusName) {
     }
     throw new Error("获取失败");
   } catch (err) {
-    common_vendor.index.__f__("warn", "at utils/app-state.js:673", "[app-state] fetchCloudCanteens fallback to local", err == null ? void 0 : err.message);
+    common_vendor.index.__f__("warn", "at utils/app-state.js:674", "[app-state] fetchCloudCanteens fallback to local", err == null ? void 0 : err.message);
     return common_data.campusCanteenMap[campusName] || [];
   }
 }
@@ -465,7 +465,7 @@ async function fetchNormalFoodPool(forceRefresh = false) {
       return data;
     }
   } catch (err) {
-    common_vendor.index.__f__("warn", "at utils/app-state.js:713", "[app-state] fetchNormalFoodPool error", err == null ? void 0 : err.message);
+    common_vendor.index.__f__("warn", "at utils/app-state.js:745", "[app-state] fetchNormalFoodPool error", err == null ? void 0 : err.message);
   }
   return common_data.genericFoods.map((item) => normalizeFoodCandidate(item, { source: "local-normal" }));
 }
@@ -488,7 +488,7 @@ async function fetchCampusFoodPool(state, forceRefresh = false) {
         return data;
       }
     } catch (err) {
-      common_vendor.index.__f__("warn", "at utils/app-state.js:740", "[app-state] fetchCampusFoodPool error", err == null ? void 0 : err.message);
+      common_vendor.index.__f__("warn", "at utils/app-state.js:772", "[app-state] fetchCampusFoodPool error", err == null ? void 0 : err.message);
     }
   }
   const selectedCanteenNames = canteens.map((item) => item.name).filter(Boolean);
@@ -554,7 +554,8 @@ async function aiPickFromCandidates({ candidates = [], state, fortune, seed = Da
     seed
   });
   if (!utils_userState.isCloudUser()) {
-    return { choice: 0, reason: fallbackReason, isAI: false };
+    common_vendor.index.__f__("warn", "at utils/app-state.js:851", "[app-state] aiPickFromCandidates skipped: not cloud user");
+    return { choice: 0, reason: fallbackReason, isAI: false, msg: "请先完成云端登录" };
   }
   try {
     const res = await utils_cloud.aiPickDishFromCandidates({
@@ -574,14 +575,21 @@ async function aiPickFromCandidates({ candidates = [], state, fortune, seed = Da
       }))
     });
     if (res.code === 0 && Number.isInteger(res.choice) && res.reason) {
+      common_vendor.index.__f__("log", "at utils/app-state.js:873", "[app-state] aiPickFromCandidates success", {
+        choice: res.choice,
+        reasonLength: res.reason.length
+      });
       return {
         choice: Math.max(0, Math.min(res.choice, candidates.length - 1)),
         reason: res.reason,
         isAI: true
       };
     }
+    common_vendor.index.__f__("warn", "at utils/app-state.js:883", "[app-state] aiPickFromCandidates fallback", res.msg || res);
+    return { choice: 0, reason: fallbackReason, isAI: false, msg: res.msg || "AI 暂时没接上" };
   } catch (err) {
-    common_vendor.index.__f__("warn", "at utils/app-state.js:847", "[app-state] aiPickFromCandidates error", err == null ? void 0 : err.message);
+    common_vendor.index.__f__("warn", "at utils/app-state.js:886", "[app-state] aiPickFromCandidates error", err == null ? void 0 : err.message);
+    return { choice: 0, reason: fallbackReason, isAI: false, msg: (err == null ? void 0 : err.message) || "AI 暂时没接上" };
   }
   return { choice: 0, reason: fallbackReason, isAI: false };
 }

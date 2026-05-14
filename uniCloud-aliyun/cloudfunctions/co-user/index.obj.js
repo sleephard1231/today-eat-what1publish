@@ -22,7 +22,7 @@ const stateCollection = db.collection('eat-what-state')
 const historyCollection = db.collection('eat-what-history')
 
 function nowField() {
-  return dbCmd.serverDate()
+  return new Date()
 }
 
 function getTokenCache(token) {
@@ -109,6 +109,53 @@ async function ensureHistoryDoc(openid) {
     records: [],
     updatedAt: nowField()
   })
+}
+
+function isPlainObject(value) {
+  return value && typeof value === 'object' && !Array.isArray(value)
+}
+
+function toSafeObject(value) {
+  return isPlainObject(value) ? value : {}
+}
+
+function normalizeDailyForSave(daily = {}) {
+  const source = toSafeObject(daily)
+  const remaining = Number(source.remaining)
+
+  return {
+    dateKey: typeof source.dateKey === 'string' ? source.dateKey : '',
+    remaining: Number.isFinite(remaining) ? remaining : 10,
+    lastResult: source.lastResult === undefined ? null : source.lastResult
+  }
+}
+
+function buildStateUpdateFields(stateData = {}) {
+  const updateFields = {
+    updatedAt: nowField()
+  }
+
+  if (stateData.mode !== undefined) updateFields.mode = stateData.mode
+  if (stateData.campusId !== undefined) updateFields.campusId = stateData.campusId
+  if (stateData.profile !== undefined) updateFields.profile = dbCmd.set(toSafeObject(stateData.profile))
+  if (stateData.daily !== undefined) updateFields.daily = dbCmd.set(normalizeDailyForSave(stateData.daily))
+  if (stateData.stats !== undefined) updateFields.stats = dbCmd.set(toSafeObject(stateData.stats))
+  if (stateData.selectedCanteen !== undefined) updateFields.selectedCanteen = dbCmd.set(toSafeObject(stateData.selectedCanteen))
+
+  return updateFields
+}
+
+function buildStateInsertDoc(openid, stateData = {}) {
+  return {
+    openid,
+    mode: stateData.mode || 'normal',
+    campusId: stateData.campusId || 'gzcc',
+    profile: toSafeObject(stateData.profile),
+    daily: normalizeDailyForSave(stateData.daily),
+    stats: toSafeObject(stateData.stats),
+    selectedCanteen: toSafeObject(stateData.selectedCanteen),
+    updatedAt: nowField()
+  }
 }
 
 module.exports = {
@@ -242,32 +289,18 @@ module.exports = {
     return { code: 0, msg: '更新成功' }
   },
 
-  async syncState(token, stateData) {
+  async syncState(token, stateData = {}) {
     const openid = await verifyToken(token)
     if (!openid) {
       return { code: -1, msg: 'token 无效或已过期' }
     }
 
-    const updateFields = {
-      updatedAt: nowField()
-    }
-
-    if (stateData.mode !== undefined) updateFields.mode = stateData.mode
-    if (stateData.campusId !== undefined) updateFields.campusId = stateData.campusId
-    if (stateData.profile !== undefined) updateFields.profile = stateData.profile
-    if (stateData.daily !== undefined) updateFields.daily = stateData.daily
-    if (stateData.stats !== undefined) updateFields.stats = stateData.stats
-    if (stateData.selectedCanteen !== undefined) updateFields.selectedCanteen = stateData.selectedCanteen
-
+    const updateFields = buildStateUpdateFields(stateData)
     const updateRes = await stateCollection.where({ openid }).update(updateFields)
     const updated = updateRes.updated || updateRes.result?.updated || 0
 
     if (!updated) {
-      await stateCollection.add({
-        openid,
-        ...stateData,
-        updatedAt: nowField()
-      })
+      await stateCollection.add(buildStateInsertDoc(openid, stateData))
     }
 
     return { code: 0, msg: '同步成功' }
@@ -332,24 +365,12 @@ module.exports = {
     const historyList = payload.historyList
 
     if (stateData) {
-      const updateFields = { updatedAt: nowField() }
-
-      if (stateData.mode !== undefined) updateFields.mode = stateData.mode
-      if (stateData.campusId !== undefined) updateFields.campusId = stateData.campusId
-      if (stateData.profile !== undefined) updateFields.profile = stateData.profile
-      if (stateData.daily !== undefined) updateFields.daily = stateData.daily
-      if (stateData.stats !== undefined) updateFields.stats = stateData.stats
-      if (stateData.selectedCanteen !== undefined) updateFields.selectedCanteen = stateData.selectedCanteen
-
+      const updateFields = buildStateUpdateFields(stateData)
       const stateUpdateRes = await stateCollection.where({ openid }).update(updateFields)
       const stateUpdated = stateUpdateRes.updated || stateUpdateRes.result?.updated || 0
 
       if (!stateUpdated) {
-        await stateCollection.add({
-          openid,
-          ...stateData,
-          updatedAt: nowField()
-        })
+        await stateCollection.add(buildStateInsertDoc(openid, stateData))
       }
     }
 

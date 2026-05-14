@@ -30,11 +30,27 @@ export function requirePrivacyAgreement(options = {}) {
   const {
     title = '先确认隐私协议',
     content = '同意隐私政策和用户协议后，才能继续使用这个功能。',
-    showLink = true
+    showLink = true,
+    redirectToLogin = false
   } = options
 
   if (hasAgreedPrivacy()) {
     return true
+  }
+
+  if (redirectToLogin) {
+    uni.showModal({
+      title,
+      content,
+      confirmText: '去勾选',
+      cancelText: '先不了',
+      success: (res) => {
+        if (res.confirm) {
+          uni.switchTab({ url: '/pages/my/my' })
+        }
+      }
+    })
+    return false
   }
 
   uni.showModal({

@@ -59,7 +59,8 @@
     "apiUrl": {
       "bsonType": "string",
       "description": "AI API 请求地址",
-      "title": "API请求地址"
+      "title": "API请求地址",
+      "defaultValue": "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions"
     },
     "useFullUrl": {
       "bsonType": "bool",
@@ -71,7 +72,7 @@
       "bsonType": "string",
       "description": "模型名称",
       "title": "模型",
-      "defaultValue": "qwen-turbo"
+      "defaultValue": "qwen-plus"
     },
     "dailyLimit": {
       "bsonType": "int",
@@ -107,7 +108,10 @@
         "lastTokens": { "bsonType": "int", "description": "最近一次 token" },
         "lastTestAt": { "bsonType": "timestamp", "description": "最近测试时间" },
         "lastTestStatus": { "bsonType": "string", "description": "最近测试状态" },
-        "lastTestMessage": { "bsonType": "string", "description": "最近测试信息" }
+        "lastTestMessage": { "bsonType": "string", "description": "最近测试信息" },
+        "lastTestProviderType": { "bsonType": "string", "description": "最近测试供应商类型" },
+        "lastTestApiUrl": { "bsonType": "string", "description": "最近测试 API 地址" },
+        "lastTestModel": { "bsonType": "string", "description": "最近测试模型" }
       }
     },
     "updatedBy": {

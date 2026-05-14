@@ -23,6 +23,7 @@ import {
   cloudCheckText,
   cloudGetStallsByCanteen,
   aiGenerateReason,
+  aiGetStatus,
   cloudGetNormalDishCandidates,
   cloudGetCampusDishCandidates,
   aiPickDishFromCandidates
@@ -692,9 +693,40 @@ let cloudMenuCache = {
   campus: {}
 }
 const MENU_CACHE_TTL = 1000 * 60 * 10
+let aiStatusCache = null
+const AI_STATUS_CACHE_TTL = 1000 * 30
 
 function isMenuCacheFresh(cache) {
   return cache && Date.now() - cache.fetchedAt < MENU_CACHE_TTL
+}
+
+function isAiStatusFresh() {
+  return aiStatusCache && Date.now() - aiStatusCache.fetchedAt < AI_STATUS_CACHE_TTL
+}
+
+export async function getAiRecommendStatus(forceRefresh = false) {
+  if (!forceRefresh && isAiStatusFresh()) {
+    return aiStatusCache.data
+  }
+
+  try {
+    const res = await aiGetStatus()
+    const status = res.code === 0 && res.data
+      ? res.data
+      : { enable: false, enableNormal: false, enableCampus: false, hasApiKey: false }
+    aiStatusCache = { fetchedAt: Date.now(), data: status }
+    return status
+  } catch (err) {
+    console.warn('[app-state] getAiRecommendStatus error', err?.message)
+    return { enable: false, enableNormal: false, enableCampus: false, hasApiKey: false }
+  }
+}
+
+export async function canUseAiRecommend(mode = 'normal', forceRefresh = false) {
+  if (!isCloudUser()) return false
+  const status = await getAiRecommendStatus(forceRefresh)
+  if (!status.enable || !status.hasApiKey) return false
+  return mode === 'campus' ? status.enableCampus !== false : status.enableNormal !== false
 }
 
 export async function fetchNormalFoodPool(forceRefresh = false) {
@@ -816,7 +848,8 @@ export async function aiPickFromCandidates({ candidates = [], state, fortune, se
   })
 
   if (!isCloudUser()) {
-    return { choice: 0, reason: fallbackReason, isAI: false }
+    console.warn('[app-state] aiPickFromCandidates skipped: not cloud user')
+    return { choice: 0, reason: fallbackReason, isAI: false, msg: '请先完成云端登录' }
   }
 
   try {
@@ -837,14 +870,21 @@ export async function aiPickFromCandidates({ candidates = [], state, fortune, se
       }))
     })
     if (res.code === 0 && Number.isInteger(res.choice) && res.reason) {
+      console.log('[app-state] aiPickFromCandidates success', {
+        choice: res.choice,
+        reasonLength: res.reason.length
+      })
       return {
         choice: Math.max(0, Math.min(res.choice, candidates.length - 1)),
         reason: res.reason,
         isAI: true
       }
     }
+    console.warn('[app-state] aiPickFromCandidates fallback', res.msg || res)
+    return { choice: 0, reason: fallbackReason, isAI: false, msg: res.msg || 'AI 暂时没接上' }
   } catch (err) {
     console.warn('[app-state] aiPickFromCandidates error', err?.message)
+    return { choice: 0, reason: fallbackReason, isAI: false, msg: err?.message || 'AI 暂时没接上' }
   }
 
   return { choice: 0, reason: fallbackReason, isAI: false }

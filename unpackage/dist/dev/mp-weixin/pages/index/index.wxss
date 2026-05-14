@@ -441,15 +441,6 @@ button:active,
   line-height: 1.6;
   font-weight: 600;
 }
-.result-popup__ai-button {
-  width: 100%;
-  margin-top: 28rpx;
-  border-radius: 24rpx;
-  height: 76rpx;
-  line-height: 76rpx;
-  font-size: 28rpx;
-  font-weight: 700;
-}
 .result-popup__button {
   margin-top: 32rpx;
   border-radius: 28rpx;

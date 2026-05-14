@@ -9,11 +9,16 @@
 
 const db = uniCloud.database()
 
-// 兼容旧版本硬编码配置；推荐在后台「AI推荐设置」里维护 API Key。
-const DASHSCOPE_API_KEY = '你的dashscope-api-key'
+// 推荐在后台「AI推荐设置」里维护 API Key；环境变量只作为兜底。
+const DASHSCOPE_API_KEY = String(process.env.DASHSCOPE_API_KEY || '').trim()
 
 // 小程序管理员 openid 兜底校验；后台 uni-admin 会优先走 uni-id 管理员角色校验。
-const ADMIN_OPENIDS = [] // 如 ['oXXXXXXXXXXXX']
+const ADMIN_OPENID_FALLBACKS = ['oxKFC3UzlxECsob71tnJsRgCVY1E']
+const ADMIN_OPENIDS = String(process.env.ADMIN_OPENIDS || '')
+  .split(',')
+  .map((openid) => openid.trim())
+  .filter(Boolean)
+  .concat(ADMIN_OPENID_FALLBACKS)
 
 // DashScope API 地址。优先使用阿里云百炼 OpenAI 兼容接口，旧 text-generation 地址仍兼容。
 const DASHSCOPE_URL = 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions'
@@ -27,6 +32,7 @@ const DAILY_PICK_LIMIT_MAX = 5
 const userCallLog = {} // { openid: [timestamp, ...] }
 const userDailyPickLog = {} // { openid: { dateKey, count } }
 const usersCollection = db.collection('eat-what-users')
+const uniIdUsersCollection = db.collection('uni-id-users')
 const aiConfigCollection = db.collection('eat-what-ai-config')
 const aiUsageCollection = db.collection('eat-what-ai-usage')
 
@@ -61,7 +67,10 @@ const DEFAULT_AI_CONFIG = {
     lastTokens: 0,
     lastTestAt: 0,
     lastTestStatus: '',
-    lastTestMessage: ''
+    lastTestMessage: '',
+    lastTestProviderType: '',
+    lastTestApiUrl: '',
+    lastTestModel: ''
   }
 }
 
@@ -429,7 +438,10 @@ async function recordAiUsage(config, usage = {}, extra = {}) {
     lastTokens: totalTokens,
     lastTestAt: extra.lastTestAt || currentUsage.lastTestAt || 0,
     lastTestStatus: extra.lastTestStatus || currentUsage.lastTestStatus || '',
-    lastTestMessage: extra.lastTestMessage || currentUsage.lastTestMessage || ''
+    lastTestMessage: extra.lastTestMessage || currentUsage.lastTestMessage || '',
+    lastTestProviderType: extra.lastTestProviderType || currentUsage.lastTestProviderType || '',
+    lastTestApiUrl: extra.lastTestApiUrl || currentUsage.lastTestApiUrl || '',
+    lastTestModel: extra.lastTestModel || currentUsage.lastTestModel || ''
   }
   await aiConfigCollection.doc(AI_CONFIG_ID).update({
     usage: nextUsage,
@@ -441,7 +453,7 @@ async function recordAiUsage(config, usage = {}, extra = {}) {
 function resolveApiKey(config = {}) {
   const savedKey = String(config.apiKey || '').trim()
   if (savedKey) return savedKey
-  if (DASHSCOPE_API_KEY && DASHSCOPE_API_KEY !== '你的dashscope-api-key') {
+  if (DASHSCOPE_API_KEY) {
     return DASHSCOPE_API_KEY
   }
   return ''
@@ -457,27 +469,40 @@ function maskApiKey(apiKey = '') {
 function toClientAiConfig(config = {}) {
   const normalized = normalizeAiConfig(config)
   return {
-      enable: normalized.enable,
-      enableNormal: normalized.enableNormal,
-      enableCampus: normalized.enableCampus,
-      provider: normalized.provider,
-      providerType: normalized.providerType,
-      providerName: normalized.providerName,
-      remark: normalized.remark,
-      websiteUrl: normalized.websiteUrl,
-      apiUrl: normalized.apiUrl,
-      useFullUrl: normalized.useFullUrl,
-      model: normalized.model,
-      dailyLimit: normalized.dailyLimit,
-      minuteLimit: normalized.minuteLimit,
-      promptStyle: normalized.promptStyle,
-      apiKeyMasked: maskApiKey(normalized.apiKey),
-      hasApiKey: !!resolveApiKey(normalized),
-      usage: normalized.usage,
-      updatedAt: normalized.updatedAt || 0,
-      updatedBy: normalized.updatedBy || ''
-    }
+    enable: normalized.enable,
+    enableNormal: normalized.enableNormal,
+    enableCampus: normalized.enableCampus,
+    provider: normalized.provider,
+    providerType: normalized.providerType,
+    providerName: normalized.providerName,
+    remark: normalized.remark,
+    websiteUrl: normalized.websiteUrl,
+    apiUrl: normalized.apiUrl,
+    useFullUrl: normalized.useFullUrl,
+    model: normalized.model,
+    dailyLimit: normalized.dailyLimit,
+    minuteLimit: normalized.minuteLimit,
+    promptStyle: normalized.promptStyle,
+    apiKeyMasked: maskApiKey(normalized.apiKey),
+    hasApiKey: !!resolveApiKey(normalized),
+    usage: normalized.usage,
+    updatedAt: normalized.updatedAt || 0,
+    updatedBy: normalized.updatedBy || ''
   }
+}
+
+function toClientAiStatus(config = {}) {
+  const normalized = normalizeAiConfig(config)
+  return {
+    enable: normalized.enable,
+    enableNormal: normalized.enableNormal,
+    enableCampus: normalized.enableCampus,
+    providerType: normalized.providerType,
+    providerName: normalized.providerName,
+    model: normalized.model,
+    hasApiKey: !!resolveApiKey(normalized)
+  }
+}
 
 async function verifyConfigAdmin(context, token = '') {
   if (token && adminTokenCache[token] && Date.now() < adminTokenCache[token].expireAt) {
@@ -490,6 +515,12 @@ async function verifyConfigAdmin(context, token = '') {
     return tokenAdmin
   }
 
+  const uniIdUserAdmin = await verifyUniIdUserByToken(token)
+  if (uniIdUserAdmin) {
+    if (token) adminTokenCache[token] = { admin: uniIdUserAdmin, expireAt: Date.now() + CONFIG_CACHE_TTL }
+    return uniIdUserAdmin
+  }
+
   const openid = await verifyToken(token)
   if (openid && ADMIN_OPENIDS.includes(openid)) {
     const admin = { openid }
@@ -500,13 +531,18 @@ async function verifyConfigAdmin(context, token = '') {
   return null
 }
 
+function hasAdminRole(role = []) {
+  const roles = Array.isArray(role) ? role : [role]
+  return roles.some((item) => ['admin', 'super_admin', 'uni-admin'].includes(String(item || '')))
+}
+
 async function verifyUniIdAdmin(context, token = '') {
   try {
     const clientInfo = context.getClientInfo ? (context.getClientInfo() || {}) : {}
     const runtimeToken = token || (typeof context.getUniIdToken === 'function' ? context.getUniIdToken() : '')
     const uid = clientInfo.uid || clientInfo.UID || ''
     const role = clientInfo.role || clientInfo.ROLE || []
-    if (role.includes('admin') || role.includes('super_admin')) {
+    if (hasAdminRole(role)) {
       return { uid }
     }
 
@@ -519,7 +555,7 @@ async function verifyUniIdAdmin(context, token = '') {
       if (payload.code || payload.errCode) return null
 
       const payloadRole = payload.role || []
-      if (payloadRole.includes('admin') || payloadRole.includes('super_admin')) {
+      if (hasAdminRole(payloadRole)) {
         return { uid: payload.uid || uid }
       }
     } catch (err) {
@@ -527,6 +563,27 @@ async function verifyUniIdAdmin(context, token = '') {
     }
   } catch (err) {
     console.warn('[co-ai] verify uni-admin context failed', err.message || err)
+  }
+  return null
+}
+
+async function verifyUniIdUserByToken(token = '') {
+  if (!token) return null
+  try {
+    const { data } = await uniIdUsersCollection
+      .where({
+        token: db.command.elemMatch({ token })
+      })
+      .field({ _id: true, role: true, username: true, nickname: true })
+      .limit(1)
+      .get()
+
+    const user = data && data[0]
+    if (user && hasAdminRole(user.role)) {
+      return { uid: user._id, username: user.username || user.nickname || '' }
+    }
+  } catch (err) {
+    console.warn('[co-ai] verify uni-id user token failed', err.message || err)
   }
   return null
 }
@@ -593,6 +650,14 @@ module.exports = {
 
     if (!config.enable) {
       return { code: -1, msg: 'AI 推荐未开启' }
+    }
+
+    const mode = context.mode === 'campus' ? 'campus' : 'normal'
+    if (mode === 'normal' && !config.enableNormal) {
+      return { code: -1, msg: '普通版 AI 推荐未开启' }
+    }
+    if (mode === 'campus' && !config.enableCampus) {
+      return { code: -1, msg: '校园版 AI 推荐未开启' }
     }
 
     if (!apiKey) {
@@ -778,6 +843,14 @@ module.exports = {
       return { code: -1, msg: 'AI 推荐未开启' }
     }
 
+    const mode = context.mode === 'campus' ? 'campus' : 'normal'
+    if (mode === 'normal' && !config.enableNormal) {
+      return { code: -1, msg: '普通版 AI 推荐未开启' }
+    }
+    if (mode === 'campus' && !config.enableCampus) {
+      return { code: -1, msg: '校园版 AI 推荐未开启' }
+    }
+
     if (!apiKey) {
       return { code: -1, msg: 'AI 服务未配置' }
     }
@@ -811,6 +884,14 @@ module.exports = {
       console.warn('[co-ai] generateFortuneText error', err.message || err)
       return { code: -1, msg: 'AI 服务不可用' }
     }
+  },
+
+  /**
+   * 读取小程序可用的 AI 开关状态（不返回密钥）
+   */
+  async getAiStatus() {
+    const config = await getAiConfig()
+    return { code: 0, data: toClientAiStatus(config) }
   },
 
   /**
@@ -901,7 +982,10 @@ module.exports = {
         const usage = await recordAiUsage(testingConfig, result.usage, {
           lastTestAt: Date.now(),
           lastTestStatus: 'success',
-          lastTestMessage: '连接正常'
+          lastTestMessage: '连接正常',
+          lastTestProviderType: testingConfig.providerType,
+          lastTestApiUrl: normalizeApiUrl(testingConfig),
+          lastTestModel: testingConfig.model
         })
         return {
           code: 0,
@@ -917,7 +1001,10 @@ module.exports = {
       await recordAiUsage(testingConfig, {}, {
         lastTestAt: Date.now(),
         lastTestStatus: 'fail',
-        lastTestMessage: '无有效返回'
+        lastTestMessage: '无有效返回',
+        lastTestProviderType: testingConfig.providerType,
+        lastTestApiUrl: normalizeApiUrl(testingConfig),
+        lastTestModel: testingConfig.model
       })
       console.warn('[co-ai] testAiConfig unexpected response', JSON.stringify(result.raw || {}).slice(0, 200))
       return { code: -1, msg: '测试失败，请检查 API Key 或模型名称' }
@@ -927,7 +1014,10 @@ module.exports = {
         await recordAiUsage(testingConfig, {}, {
           lastTestAt: Date.now(),
           lastTestStatus: 'fail',
-          lastTestMessage: err.message || 'AI 服务连接失败'
+          lastTestMessage: err.message || 'AI 服务连接失败',
+          lastTestProviderType: testingConfig.providerType,
+          lastTestApiUrl: normalizeApiUrl(testingConfig),
+          lastTestModel: testingConfig.model
         })
       } catch (recordErr) {
         console.warn('[co-ai] record test failure failed', recordErr.message || recordErr)

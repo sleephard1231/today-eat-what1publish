@@ -1,0 +1,20 @@
+[
+  {
+    "IndexName": "idx_openid_updatedAt",
+    "MgoKeySchema": {
+      "MgoIndexKeys": [
+        {
+          "Name": "openid",
+          "Direction": "1",
+          "Type": "varchar"
+        },
+        {
+          "Name": "updatedAt",
+          "Direction": "-1",
+          "Type": "timestamp"
+        }
+      ],
+      "MgoIsUnique": false
+    }
+  }
+]

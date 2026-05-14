@@ -10,8 +10,17 @@ const _sfc_main = {
     const refreshPage = () => {
       state.value = utils_appState.getAppState();
     };
-    common_vendor.onLoad(refreshPage);
-    common_vendor.onShow(refreshPage);
+    let hasLoaded = false;
+    common_vendor.onLoad(() => {
+      refreshPage();
+    });
+    common_vendor.onShow(() => {
+      if (!hasLoaded) {
+        hasLoaded = true;
+        return;
+      }
+      refreshPage();
+    });
     const isCampusMode = common_vendor.computed(() => state.value.mode === "campus");
     const theme = common_vendor.computed(() => utils_appState.getTheme(state.value.mode));
     const currentCampus = common_vendor.computed(() => utils_appState.getCampusById(state.value.campusId));

@@ -116,7 +116,7 @@
         <view class="result-popup__glow"></view>
 
         <view class="result-popup__top">
-          <text class="result-popup__tag">{{ state.mode === 'campus' ? '校园版推荐' : '普通版推荐' }}</text>
+          <text class="result-popup__tag">{{ popupResult.isAI ? 'AI 推荐' : (state.mode === 'campus' ? '校园版推荐' : '普通版推荐') }}</text>
           <text class="result-popup__time">{{ popupResult.createdAt }}</text>
         </view>
 
@@ -131,17 +131,6 @@
           <text class="result-popup__label">推荐理由</text>
           <text class="result-popup__reason">{{ popupRevealReason }}</text>
         </view>
-
-        <button
-          v-if="canRequestAiReason"
-          class="result-popup__ai-button press-feedback"
-          :style="ghostButtonStyle"
-          hover-class="press-feedback--active"
-          hover-start-time="20"
-          hover-stay-time="90"
-          :disabled="isAiPicking"
-          @click="handleRequestAiPick"
-        >{{ isAiPicking ? 'AI 思考中...' : '让 AI 再挑一次' }}</button>
 
         <button
           class="result-popup__button press-feedback"
@@ -161,15 +150,13 @@ import { computed, ref } from 'vue'
 import { onLoad, onShow, onUnload } from '@dcloudio/uni-app'
 import { appetiteLabels, energyLevelLabels, luckLabels } from '@/common/data.js'
 import { aiPickFromCandidates, applyTabBarTheme, drawMealResultAsync, getAppState, getCampusById, getTheme, getTodayFortune, updateLatestMealResult } from '@/utils/app-state.js'
-import { requirePrivacyAgreement } from '@/utils/privacy-state.js'
-import { requireLogin } from '@/utils/user-state.js'
+import { hasAgreedPrivacy } from '@/utils/privacy-state.js'
 
 const statusBarHeight = uni.getWindowInfo().statusBarHeight || 20
 const state = ref(getAppState())
 const isDrawing = ref(false)
 const showResultPopup = ref(false)
 const popupResult = ref(null)
-const isAiPicking = ref(false)
 const popupCandidates = ref([])
 const popupSeed = ref(0)
 const popupSelectedCanteenNames = ref([])
@@ -264,11 +251,6 @@ const miniProgressTrackStyle = computed(() => {
 })
 
 const popupRevealReason = computed(() => buildRevealReason(popupResult.value))
-const canRequestAiReason = computed(() => (
-  !!popupResult.value &&
-  !popupResult.value.isAI &&
-  popupCandidates.value.length > 0
-))
 const popupMetaText = computed(() => {
   if (!popupResult.value) return ''
   if (popupResult.value.mode !== 'campus') return ''
@@ -295,11 +277,6 @@ const accentFillStyle = computed(() => ({
   background: `linear-gradient(135deg, ${theme.value.accent} 0%, ${theme.value.accentDeep} 100%)`,
   boxShadow: theme.value.shadow,
   color: '#ffffff'
-}))
-const ghostButtonStyle = computed(() => ({
-  background: theme.value.accentSoft,
-  color: theme.value.accent,
-  border: `1px solid ${theme.value.border}`
 }))
 const popupCardStyle = computed(() => ({
   background: `linear-gradient(180deg, ${theme.value.card} 0%, #ffffff 100%)`,
@@ -345,81 +322,78 @@ function applyAiPick(aiPick, candidates) {
 
 async function handleDrawMeal() {
   if (isDrawing.value) return
-  if (!requirePrivacyAgreement({
-    content: '同意隐私政策和用户协议后，才能为你保存推荐状态和历史记录。'
-  })) {
+  if (!hasAgreedPrivacy()) {
+    uni.showToast({ title: '先去“我的”页勾选用户协议哦', icon: 'none' })
+    setTimeout(() => {
+      uni.switchTab({ url: '/pages/my/my' })
+    }, 300)
     return
   }
 
   clearRevealTimers()
   showResultPopup.value = false
-
-  const drawResult = await drawMealResultAsync()
-  state.value = drawResult.state
-  applyTabBarTheme(drawResult.state.mode)
-  animateFortuneProgress()
-
-  if (drawResult.exhausted) {
-    uni.showToast({ title: '今天的使用次数用完了', icon: 'none' })
-    return
-  }
-
-  popupResult.value = drawResult.result
-  popupCandidates.value = drawResult.candidates || []
-  popupSeed.value = drawResult.seed || Date.now()
-  popupSelectedCanteenNames.value = drawResult.selectedCanteenNames || []
   isDrawing.value = true
+  const startAt = Date.now()
 
-  drawTimer = setTimeout(() => {
-    isDrawing.value = false
-    showResultPopup.value = true
-    drawTimer = null
-  }, 1500)
-}
-
-async function handleRequestAiPick() {
-  if (isAiPicking.value || !popupResult.value) return
-  if (!requirePrivacyAgreement({
-    content: '同意隐私政策和用户协议后，才能使用 AI 推荐。'
-  })) {
-    return
-  }
-  if (!requireLogin({
-    cloudOnly: true,
-    content: '登录后才能让 AI 再帮你挑一次。'
-  })) {
-    return
-  }
-
-  isAiPicking.value = true
   try {
-    const aiPick = await aiPickFromCandidates({
-      candidates: popupCandidates.value,
-      state: state.value,
-      fortune: fortune.value,
-      seed: popupSeed.value,
-      selectedCanteenNames: popupSelectedCanteenNames.value
-    })
-    applyAiPick(aiPick, popupCandidates.value)
-    if (!aiPick.isAI) {
-      uni.showToast({ title: 'AI 暂时没接上，先按当前推荐来', icon: 'none' })
+    const drawResult = await drawMealResultAsync()
+    state.value = drawResult.state
+    applyTabBarTheme(drawResult.state.mode)
+    animateFortuneProgress()
+
+    if (drawResult.exhausted) {
+      uni.showToast({ title: '今天的使用次数用完了', icon: 'none' })
+      isDrawing.value = false
+      return
     }
+
+    popupResult.value = drawResult.result
+    popupCandidates.value = drawResult.candidates || []
+    popupSeed.value = drawResult.seed || Date.now()
+    popupSelectedCanteenNames.value = drawResult.selectedCanteenNames || []
+
+    if (popupCandidates.value.length > 0) {
+      const aiPick = await aiPickFromCandidates({
+        candidates: popupCandidates.value,
+        state: state.value,
+        fortune: fortune.value,
+        seed: popupSeed.value,
+        selectedCanteenNames: popupSelectedCanteenNames.value
+      })
+      applyAiPick(aiPick, popupCandidates.value)
+    }
+
+    const elapsed = Date.now() - startAt
+    drawTimer = setTimeout(() => {
+      isDrawing.value = false
+      showResultPopup.value = true
+      drawTimer = null
+    }, Math.max(0, 1500 - elapsed))
   } catch (err) {
-    console.warn('[index] ai pick failed', err?.message || err)
-    uni.showToast({ title: 'AI 暂时没想好，先吃这个也不错', icon: 'none' })
-  } finally {
-    isAiPicking.value = false
+    console.warn('[index] draw meal failed', err?.message || err)
+    isDrawing.value = false
+    uni.showToast({ title: '推荐暂时没出来，稍后再试一下', icon: 'none' })
   }
 }
 
 function closeResultPopup() {
   showResultPopup.value = false
-  isAiPicking.value = false
   clearRevealTimers()
 }
 
-onLoad(refreshState)
-onShow(refreshState)
+let hasLoaded = false
+
+onLoad(() => {
+  refreshState()
+})
+
+onShow(() => {
+  if (!hasLoaded) {
+    hasLoaded = true
+    return
+  }
+  refreshState()
+})
 onUnload(() => {
   clearRevealTimers()
   clearProgressTimer()
@@ -487,7 +461,6 @@ onUnload(() => {
 .result-popup__divider { height: 2rpx; margin-top: 24rpx; background: linear-gradient(90deg, rgba(255,138,61,0) 0%, rgba(255,138,61,0.22) 50%, rgba(255,138,61,0) 100%); }
 .result-popup__label { display: block; margin-top: 22rpx; color: #9f9185; font-size: 22rpx; font-weight: 700; letter-spacing: 2rpx; }
 .result-popup__reason { display: block; margin-top: 14rpx; color: #403127; font-size: 32rpx; line-height: 1.6; font-weight: 600; }
-.result-popup__ai-button { width: 100%; margin-top: 28rpx; border-radius: 24rpx; height: 76rpx; line-height: 76rpx; font-size: 28rpx; font-weight: 700; }
 .result-popup__button { margin-top: 32rpx; border-radius: 28rpx; height: 92rpx; line-height: 92rpx; font-size: 30rpx; font-weight: 700; letter-spacing: 4rpx; }
 
 @keyframes chipBounceTap {

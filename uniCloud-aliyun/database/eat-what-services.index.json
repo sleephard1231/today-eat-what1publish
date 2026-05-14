@@ -1,0 +1,25 @@
+[
+  {
+    "IndexName": "idx_campusName_status_sort",
+    "MgoKeySchema": {
+      "MgoIndexKeys": [
+        {
+          "Name": "campusName",
+          "Direction": "1",
+          "Type": "varchar"
+        },
+        {
+          "Name": "status",
+          "Direction": "1",
+          "Type": "varchar"
+        },
+        {
+          "Name": "sort",
+          "Direction": "1",
+          "Type": "number"
+        }
+      ],
+      "MgoIsUnique": false
+    }
+  }
+]

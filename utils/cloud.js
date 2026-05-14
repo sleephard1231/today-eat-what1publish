@@ -518,6 +518,19 @@ export async function aiPickDishFromCandidates(payload = {}) {
 }
 
 /**
+ * 读取小程序可用的 AI 开关状态
+ */
+export async function aiGetStatus() {
+  try {
+    const co = getCoAi()
+    return await co.getAiStatus()
+  } catch (err) {
+    console.warn('[cloud] aiGetStatus error', err)
+    return { code: -1, data: { enable: false }, msg: 'AI 状态读取失败' }
+  }
+}
+
+/**
  * AI 批量生成推荐理由
  */
 export async function aiBatchGenerateReasons(contexts) {

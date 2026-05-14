@@ -134,11 +134,7 @@ const _sfc_main = {
       if (!validateForm()) {
         return;
       }
-      if (!utils_privacyState.requirePrivacyAgreement({
-        content: "同意隐私政策和用户协议后，才能提交校园入驻申请。"
-      })) {
-        return;
-      }
+      utils_privacyState.agreePrivacy();
       if (!isDraftSaved.value) {
         utils_appState.saveCampusApplicationDraft({ ...form });
         isDraftSaved.value = true;

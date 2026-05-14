@@ -1,0 +1,20 @@
+[
+  {
+    "IndexName": "idx_name_status",
+    "MgoKeySchema": {
+      "MgoIndexKeys": [
+        {
+          "Name": "name",
+          "Direction": "1",
+          "Type": "varchar"
+        },
+        {
+          "Name": "status",
+          "Direction": "1",
+          "Type": "varchar"
+        }
+      ],
+      "MgoIsUnique": false
+    }
+  }
+]

@@ -99,8 +99,19 @@ const refreshPage = () => {
   state.value = getAppState()
 }
 
-onLoad(refreshPage)
-onShow(refreshPage)
+let hasLoaded = false
+
+onLoad(() => {
+  refreshPage()
+})
+
+onShow(() => {
+  if (!hasLoaded) {
+    hasLoaded = true
+    return
+  }
+  refreshPage()
+})
 
 const isCampusMode = computed(() => state.value.mode === 'campus')
 const theme = computed(() => getTheme(state.value.mode))

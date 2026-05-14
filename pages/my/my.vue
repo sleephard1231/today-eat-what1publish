@@ -135,13 +135,25 @@
             @blur="onNicknameInput"
           />
         </view>
+        <view class="login-agreement-row" @click="toggleLoginAgreement">
+          <view class="login-agreement-check" :style="loginAgreementChecked ? accentFillStyle : loginAgreementCheckStyle">
+            <text class="login-agreement-check__icon">{{ loginAgreementChecked ? '✓' : '' }}</text>
+          </view>
+          <text class="login-agreement-text">
+            我已阅读并同意
+            <text class="login-agreement-link" @click.stop="goPrivacyPolicy">《隐私政策》</text>
+            和
+            <text class="login-agreement-link" @click.stop="goUserAgreement">《用户协议》</text>
+          </text>
+        </view>
         <button
           class="login-button press-feedback"
-          :style="accentFillStyle"
+          :style="canSubmitLogin ? accentFillStyle : disabledLoginButtonStyle"
           hover-class="press-feedback--active"
           hover-start-time="20"
           hover-stay-time="90"
           :loading="isLoggingIn"
+          :disabled="!canSubmitLogin || isLoggingIn"
           @click="handleLogin"
         >
           {{ isLoggingIn ? '登录中...' : '登录' }}
@@ -277,7 +289,7 @@ import {
   getTheme,
   saveAppState
 } from '@/utils/app-state.js'
-import { requirePrivacyAgreement } from '@/utils/privacy-state.js'
+import { agreePrivacy, hasAgreedPrivacy } from '@/utils/privacy-state.js'
 import { getUser, saveUser, clearUser, consumeLoginIntent, getLoginStatusMeta, handleLogin as cloudLogin, isCloudUser, requireLogin, syncProfileToCloud, uploadAvatarToCloud } from '@/utils/user-state.js'
 
 const statusBarHeight = uni.getWindowInfo().statusBarHeight || 20
@@ -297,6 +309,7 @@ const loginForm = reactive({
   avatar: '',
   nickname: ''
 })
+const loginAgreementChecked = ref(hasAgreedPrivacy())
 const pendingMbti = ref(state.value.profile.mbti)
 const pendingZodiac = ref(state.value.profile.zodiac)
 
@@ -305,6 +318,7 @@ function refreshState() {
   user.value = getUser()
   historyCount.value = getHistoryList().length
   applicationCount.value = getCampusApplications().length
+  loginAgreementChecked.value = hasAgreedPrivacy()
   pendingMbti.value = state.value.profile.mbti
   pendingZodiac.value = state.value.profile.zodiac
   applyTabBarTheme(state.value.mode)
@@ -321,6 +335,8 @@ function onUserStateChange() {
   refreshState()
 }
 
+let hasLoaded = false
+
 onLoad(() => {
   refreshState()
   openLoginSheetIfNeeded()
@@ -329,6 +345,10 @@ onLoad(() => {
 })
 
 onShow(() => {
+  if (!hasLoaded) {
+    hasLoaded = true
+    return
+  }
   refreshState()
   openLoginSheetIfNeeded()
 })
@@ -431,6 +451,18 @@ const ghostButtonStyle = computed(() => ({
   color: theme.value.accent,
   border: `1px solid ${theme.value.border}`
 }))
+const canSubmitLogin = computed(() => Boolean(loginAgreementChecked.value && loginForm.nickname.trim()))
+const disabledLoginButtonStyle = computed(() => ({
+  background: '#f0d8c6',
+  color: 'rgba(255,255,255,0.9)',
+  boxShadow: 'none'
+}))
+
+const loginAgreementCheckStyle = computed(() => ({
+  border: `1px solid ${theme.value.border}`,
+  background: 'rgba(255,255,255,0.82)',
+  color: theme.value.accent
+}))
 
 const loginModeTextStyle = computed(() => ({
   color: loginStatus.value.isCloudUser ? theme.value.accent : '#c78357'
@@ -488,17 +520,17 @@ function onNicknameInput(e) {
   loginForm.nickname = e.detail.value || ''
 }
 
+function toggleLoginAgreement() {
+  loginAgreementChecked.value = !loginAgreementChecked.value
+}
+
 async function handleLogin() {
   if (isLoggingIn.value) return
-  if (!requirePrivacyAgreement({
-    content: '同意隐私政策和用户协议后，才能继续登录。'
-  })) {
+  if (!canSubmitLogin.value) {
     return
   }
-
-  if (!loginForm.nickname.trim()) {
-    uni.showToast({ title: '请填写昵称', icon: 'none' })
-    return
+  if (!hasAgreedPrivacy()) {
+    agreePrivacy()
   }
 
   isLoggingIn.value = true
@@ -761,6 +793,11 @@ function goUserAgreement() {
 .login-field { display: flex; align-items: center; gap: 18rpx; margin-top: 32rpx; padding: 0 8rpx; width: 100%; }
 .login-field__label { color: #2f251d; font-size: 28rpx; font-weight: 700; flex-shrink: 0; }
 .login-field__input { flex: 1; height: 80rpx; padding: 0 22rpx; border-radius: 22rpx; background: rgba(255,255,255,0.74); color: #3f3126; font-size: 26rpx; }
+.login-agreement-row { display: flex; align-items: flex-start; gap: 14rpx; margin-top: 22rpx; padding: 0 8rpx; }
+.login-agreement-check { display: flex; align-items: center; justify-content: center; width: 32rpx; height: 32rpx; border-radius: 10rpx; flex-shrink: 0; margin-top: 4rpx; }
+.login-agreement-check__icon { font-size: 20rpx; font-weight: 700; line-height: 1; color: inherit; }
+.login-agreement-text { flex: 1; color: #8f8174; font-size: 22rpx; line-height: 1.6; }
+.login-agreement-link { color: #ff7f32; font-weight: 700; }
 .login-button { width: 100%; height: 88rpx; border-radius: 28rpx; margin-top: 32rpx; text-align: center; line-height: 88rpx; font-size: 30rpx; font-weight: 700; color: #ffffff; letter-spacing: 2rpx; }
 
 // 个人资料编辑 sheet

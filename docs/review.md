@@ -23,16 +23,16 @@
 
 - 档口、菜品写接口已加管理员鉴权，但上线前必须确认 `ADMIN_OPENIDS` 已填真实 openid。
 - AI 云对象已加 token 鉴权、每日额度和用量记录，但需要上传 `co-ai` 与 `eat-what-ai-usage` schema 后才会在云端生效。
-- 抽餐流程会分别同步 state 和 history，慢速连续点击时会产生两次云对象调用。
-- 部分页面首屏会重复请求。
-- 部分列表接口没有分页、TTL 缓存和索引规划，数据量变大后查询成本会上升。
+- 抽餐主流程已合并为一次 `syncAppData` 同步，但通用 `syncState` / `syncHistory` 路径仍保留在其他场景中。
+- 部分页面仍存在 `onLoad` / `onShow` 连续触发的重复本地刷新，不过涉及云调用放大的主要页面已经修过一轮。
+- 部分列表接口分页仍未补齐；TTL 缓存和索引已补到基础版，但需要确认索引与云函数都已上传到 uniCloud。
 - 部分代码绕过了统一云调用层，后续很难统一加缓存、限流和埋点。
 
 建议优先级：
 
 1. 先修鉴权：所有写接口、AI 接口必须校验 token 或管理员身份。（主要项已处理，需上传云端）
 2. 再降调用量：合并抽餐后的 state/history 同步。
-3. 再补数据库优化：给高频查询字段建索引，给公开列表加缓存。
+3. 再补数据库优化：继续完善分页，并确认索引与缓存配置都已上传云端生效。
 4. 最后整理架构：所有前端云调用统一走 `utils/cloud.js`。
 
 ## 风险 1：档口和菜品写接口没有鉴权
@@ -169,9 +169,11 @@ async addStall(token, canteenId, stallData = {}) {
 - 不允许调用 AI
 ```
 
-## 风险 3：抽餐后 state 和 history 分开同步，调用量可以合并
+## 风险 3：抽餐主流程的 state / history 同步已合并，但通用同步路径仍并存
 
 风险等级：中高
+
+修复状态：已修复基础版。抽餐主流程与结果更新流程已改为走 `syncAppData(token, { stateData, historyList })` 一次同步；但 `saveAppState()` 与 `saveHistoryList()` 的通用路径仍分别保留 `syncStateToCloud()`、`syncHistoryToCloud()`，用于其他独立场景。
 
 相关位置：
 
@@ -184,29 +186,39 @@ async addStall(token, canteenId, stallData = {}) {
 - 前端：`saveHistoryList`
 - 前端：`syncStateToCloud`
 - 前端：`syncHistoryToCloud`
+- 前端：`syncAppDataToCloud`
 - 云端：`syncState`
 - 云端：`syncHistory`
+- 云端：`syncAppData`
 
 问题说明：
 
-用户点击抽餐后，`drawMealResult()` 会做两件事：
+旧问题是：用户点击抽餐后，会分别触发 state 同步和 history 同步。
 
-- 调用 `saveAppState()`，触发 state 同步。
-- 调用 `saveHistoryList()`，触发 history 同步。
+当前代码已经把这条高频路径收敛了：
 
-虽然前端已经做了防抖：
+- `drawMealResultAsync()` 在本地保存 state / history 时使用 `skipCloudSync: true`
+- 然后统一调用一次 `syncAppDataToCloud(nextState, nextHistory)`
+- `updateLatestMealResult()` 更新最近结果时也同样走合并同步
 
-- state 同步防抖 3 秒。
-- history 同步防抖 5 秒。
+当前仍保留的现状：
 
-但对于慢速点击来说，每次抽餐仍然可能产生两次云对象调用。
+- `syncStateToCloud` 仍有 3 秒防抖。
+- `syncHistoryToCloud` 仍有 5 秒防抖。
+- `syncAppDataToCloud` 也有独立的 3 秒防抖。
+
+所以“每次抽餐必然打两次云对象”的问题已经不成立；剩下的是架构层面还存在两套同步入口。
 
 为什么会影响调用量：
 
-一次完整抽餐可能产生：
+旧实现里，一次完整抽餐可能产生：
 
 - 1 次 `co-user.syncState`
 - 1 次 `co-user.syncHistory`
+
+现在抽餐主流程通常是：
+
+- 1 次 `co-user.syncAppData`
 
 每个云端方法内部又会：
 
@@ -214,34 +226,26 @@ async addStall(token, canteenId, stallData = {}) {
 - 再查询 state/history 是否存在。
 - 再执行 update 或 add。
 
-也就是说，一次用户行为可能变成多次数据库读写。
+也就是说，调用量最大的主用户路径已经压缩过，但通用同步 API 仍有继续收敛的空间。
 
 触发场景：
 
-- 用户隔 6 秒点一次抽餐，防抖无法合并。
-- 用户每天允许抽 10 次，理论上可能产生 20 次同步云对象调用。
-- 多用户同时使用时，调用量会线性上涨。
+- 用户通过其他设置项单独改 profile / state，再单独改 history。
+- 某些非抽餐场景仍分别调用 `saveAppState()` 或 `saveHistoryList()`。
+- 如果后续继续扩展同步逻辑，可能再次出现两套入口并存。
 
-建议修复：
+已处理：
 
-新增一个云对象方法，例如：
+- 前端已新增 `syncAppDataToCloud()`。
+- 云端 `co-user` 已新增 `syncAppData(token, payload)`。
+- 抽餐主流程和最新结果更新流程已切换到合并同步。
 
-```js
-syncAppData(token, { stateData, historyList })
-```
-
-云端一次 token 校验后，同时更新：
-
-- `eat-what-state`
-- `eat-what-history`
-
-这样一次抽餐后最多只需要一次云对象调用。
-
-进一步优化：
+后续建议：
 
 - 历史记录不必每次全量覆盖 30 条，可以只追加最新一条。
 - state 中的 `lastResult` 已经包含最近结果，history 可以延迟同步。
 - 用户退出页面或达到一定数量后再批量同步 history。
+- 评估是否逐步收敛 `syncState` / `syncHistory` 的直接使用场景，减少重复维护。
 
 ## 风险 4：token 验证每次都查 users 表，读放大明显
 
@@ -467,17 +471,20 @@ getServicesByCampus: 10-60 分钟
 
 风险等级：中
 
+修复状态：部分修复。`getApprovedCampuses(page, pageSize)` 已补入参，但当前实现仍需确认返回结果是否真正按分页裁切；`getCanteensByCampus`、`getStallsByCanteen`、`getDishesByStall`、`getServicesByCampus` 仍未补分页参数。
+
 相关位置：
 
 - `co-campus.getApprovedCampuses`
 - `co-campus.getCanteensByCampus`
 - `co-campus.getStallsByCanteen`
+- `co-campus.getDishesByStall`
 - `co-campus.getCanteenFullData`
 - `co-campus.getServicesByCampus`
 
 问题说明：
 
-当前很多接口都是 `.get()` 直接取全部匹配数据，没有 `limit` 或分页参数。
+当前这组公开读接口里，分页处理还不一致。`getApprovedCampuses` 已新增 `page`、`pageSize` 入参，但其余列表接口大多仍是一次性返回全部匹配数据；`getCanteenFullData` 本身也是聚合接口，仍会一次返回整份饭堂/档口/菜品结构。
 
 为什么会影响调用量和性能：
 
@@ -494,7 +501,7 @@ getServicesByCampus: 10-60 分钟
 
 建议修复：
 
-- 普通列表接口增加 `page` 和 `pageSize`。
+- 普通列表接口统一增加 `page` 和 `pageSize`，并在云端真实应用 `skip/limit`。
 - 详情页只查当前饭堂或当前档口。
 - 首页推荐不需要完整菜单时，不要调用 `getCanteenFullData`。
 - `getCanteenFullData` 只用于确实需要全量展示的页面。
@@ -502,6 +509,8 @@ getServicesByCampus: 10-60 分钟
 ## 风险 9：数据库索引规划不足
 
 风险等级：中
+
+修复状态：已修复基础版。项目中已新增主要集合的 `.index.json` 索引文件，但仍需要确认这些索引已经上传到 uniCloud 控制台并成功生效。
 
 相关位置：
 
@@ -530,14 +539,14 @@ getServicesByCampus: 10-60 分钟
 
 问题说明：
 
-当前 schema 主要定义了字段和权限，没有看到明确索引配置。随着数据量增加，where 查询会越来越慢。
+这个问题在源码层面已经补了基础索引：`users`、`applications`、`state`、`history`、`canteens`、`stalls`、`dishes`、`services`、`ai-usage` 等集合都已有对应 `.index.json`。当前更大的风险已经不是“代码里完全没配索引”，而是上线时如果没有把这些索引一并上传，云端实际查询性能仍会退回到未优化状态。
 
 为什么会影响调用量：
 
 索引不足不一定增加调用次数，但会增加每次调用的执行时间和数据库扫描成本。  
 云函数执行时间变长，也可能增加费用和超时概率。
 
-建议索引：
+当前已补的关键索引：
 
 ```text
 eat-what-users:
@@ -545,29 +554,51 @@ eat-what-users:
 - token
 
 eat-what-state:
-- openid
+- openid + updatedAt
 
 eat-what-history:
-- openid
+- openid + updatedAt
 
 eat-what-applications:
 - openid + createdAt
 - status + createdAt
-- openid + campusName + campusTag + status
+- openid + status + createdAt
+
+eat-what-campuses:
+- name + status
 
 eat-what-canteens:
 - campusName + status + sort
+- status + updatedAt
 
 eat-what-stalls:
 - canteenId + status + sort
+- status + updatedAt
 
 eat-what-dishes:
 - stallId + status + sort
-- canteenId + status
+- canteenId + status + sort
+- status + updatedAt
 
 eat-what-services:
 - campusName + status + sort
+
+eat-what-ai-usage:
+- openid + dateKey
+- dateKey + updatedAt
 ```
+
+上线检查：
+
+- 在 HBuilderX / uniCloud 控制台确认所有 `.index.json` 都已上传。
+- 索引上传后再观察慢查询和云函数耗时，避免“代码有索引、线上没生效”。
+
+## 当前代码状态同步
+
+- `co-ai` 的 `DASHSCOPE_API_KEY` 占位字符串问题已修复，当前改为读取 `process.env.DASHSCOPE_API_KEY`，不再是硬编码 `'你的dashscope-api-key'`。
+- `co-ai` 与 `co-campus` 的 `ADMIN_OPENIDS` 空数组问题也已修复，当前都支持环境变量，并带有 fallback 管理员 openid。
+- AI 默认模型不一致问题已修复：`co-ai` 默认模型与 `eat-what-ai-config.schema.json` 当前都为 `qwen-plus`。
+- 这几项虽然源码已对齐，但上线前仍要确认真实环境变量、后台 AI 配置和云函数部署都已完成。
 
 ## 风险 10：内容安全检查会额外调用微信接口
 
@@ -651,36 +682,34 @@ eat-what-services:
 
 风险等级：中低
 
-修复状态：未修复。以下 3 处 `app-state.js` 中的函数仍直接调用 `uniCloud.importObject('co-campus')`，未走 `utils/cloud.js` 统一封装。
+修复状态：已修复。当前前端业务代码中的云对象调用已经统一通过 `utils/cloud.js` 封装，不再在 `utils/app-state.js` 中直接 `uniCloud.importObject('co-campus')`。
 
-具体位置：
+当前状态：
 
-1. `utils/app-state.js:638` — `fetchCloudCanteens` 内直接 `uniCloud.importObject('co-campus')`，调用 `getCanteensByCampus`
-2. `utils/app-state.js:867` — `fetchCloudStalls` 内直接 `uniCloud.importObject('co-campus')`，调用 `getStallsByCanteen`
-3. `utils/app-state.js:893` — `fetchCanteenFullData` 内直接 `uniCloud.importObject('co-campus')`，调用 `getCanteenFullData`
+- `fetchCloudCanteens()` → `cloudGetCanteensByCampus()`
+- `fetchCloudStalls()` → `cloudGetStallsByCanteen()`
+- `fetchCanteenFullData()` → `cloudGetCanteenFullData()`
 
 相关位置：
 
-- `utils/app-state.js:638,867,893`
+- `utils/app-state.js`
+- `utils/cloud.js`
 
 问题说明：
 
-项目文档里写了”所有云对象调用统一通过 `utils/cloud.js`，页面里不要直接 `uniCloud.importObject`”。但 `utils/app-state.js` 里仍然直接调用。
+项目文档里写了“所有云对象调用统一通过 `utils/cloud.js`，页面里不要直接 `uniCloud.importObject`”。这一点在当前前端源码里已经对齐。
 
 为什么会影响调用量治理：
 
-- 后续想统一加缓存时，会漏掉这些直接调用点。
-- 后续想统一打日志、统计调用次数时，会漏掉这些直接调用点。
-- 后续想统一处理失败降级、重试、限流时，会出现两套逻辑。
+- 统一加缓存时不会再漏掉这些高频调用点。
+- 统一打日志、统计调用次数会更容易落地。
+- 统一处理失败降级、重试、限流时不会再分两套入口。
 
-建议修复：
+已处理：
 
-- 在 `utils/cloud.js` 中补齐：
-  - `cloudGetCanteensByCampus`
-  - `cloudGetCanteenFullData`
-  - `cloudGetServicesByCampus`
-- `utils/app-state.js` 只调用 `utils/cloud.js`。
-- 页面层不要直接 `uniCloud.importObject`。
+- `utils/cloud.js` 已提供相关云调用封装。
+- `utils/app-state.js` 已切回只调用 `utils/cloud.js`。
+- 当前项目里剩余的 `uniCloud.importObject(...)` 仅位于 `utils/cloud.js` 和云函数内部调用，不属于这个风险项。
 
 ## 风险 13：新增和删除后总是重新拉取整份列表
 
@@ -811,52 +840,74 @@ eat-what-services:
 
 风险等级：中
 
-修复状态：未修复。以下 3 个页面首次进入时都会因 `onLoad` → `onShow` 顺序触发导致重复执行刷新逻辑。
+修复状态：部分修复。此前会放大云调用或状态刷新的主要页面已经做了一轮处理，但文档里列举的页面列表和影响程度已经落后于当前代码。
+
+已确认修复的页面：
+
+- `pages/index/index.vue` 已增加 `hasLoaded`，首次 `onShow` 不再重复执行 `refreshState()`。
+- `pages/my/my.vue` 已增加 `hasLoaded`，首次 `onShow` 不再重复执行 `refreshState()`。
+- `pages/service/service.vue` 已增加 `hasLoaded`，首次 `onShow` 不再重复执行 `refreshPage()`。
 
 ### 17a. `pages/canteen/canteen.vue`
 
-相关位置：`pages/canteen/canteen.vue:73-84`
+相关位置：`pages/canteen/canteen.vue`
 
 ```js
 onLoad(async () => {
-  refreshPage()           // 第一次刷新
-  // fetchCloudCanteens()
+  refreshPage()
+  // 额外执行一次 fetchCloudCanteens()
 })
 
-onShow(refreshPage)       // 第二次刷新
+onShow(refreshPage)
 ```
+
+现状说明：这里仍有首次 `onLoad -> onShow` 的双刷新，但 `onShow` 只会做本地 `refreshPage()`，不会再次触发 `fetchCloudCanteens()`，所以“首屏重复云调用”这一点已经不准确。
 
 ### 17b. `pages/history/index.vue`
 
-相关位置：`pages/history/index.vue:51-57`
+相关位置：`pages/history/index.vue`
 
 ```js
 onLoad(() => {
-  refreshData()           // 第一次刷新
+  refreshData()
 })
 
 onShow(() => {
-  refreshData()           // 第二次刷新
+  refreshData()
 })
 ```
 
+现状说明：这里仍有首次重复刷新，但主要是本地状态与历史记录读取，不涉及额外云对象请求，影响比原审查结论要轻。
+
 ### 17c. `pages/my/my.vue`
 
-相关位置：`pages/my/my.vue:312-318`
+相关位置：`pages/my/my.vue`
 
 ```js
 onLoad(() => {
   refreshState()
+  openLoginSheetIfNeeded()
   uni.$on('user-state-changed', onUserStateChange)
   uni.$on('app-state-changed', refreshState)
 })
 
-onShow(refreshState)       // 重复刷新 + 事件监听也可能导致额外刷新
+onShow(() => {
+  if (!hasLoaded) {
+    hasLoaded = true
+    return
+  }
+  refreshState()
+})
 ```
 
-问题说明：这些页面首次进入时 `onLoad` 和 `onShow` 会连续触发，导致首屏数据刷新执行两次。对于有云调用的页面（如 canteen.vue），会产生额外的云对象调用。
+现状说明：`pages/my/my.vue` 已增加 `hasLoaded` 防重入逻辑，这一项应视为已修复。
 
-建议修复：统一采用 `hasLoaded` 标记模式，`onShow` 仅在非首次进入时触发刷新。
+问题说明：当前剩余的主要问题是“少数页面仍有首次双刷新”，但它们多数已经降为重复本地读状态，而不是重复打云端。
+
+建议修复：
+
+- 对 `pages/canteen/canteen.vue`、`pages/history/index.vue` 也统一采用 `hasLoaded` 标记模式。
+- 审查时优先区分“重复本地刷新”和“重复云调用”两类影响，避免把风险等级写得过重。
 
 ---
 
@@ -864,15 +915,18 @@ onShow(refreshState)       // 重复刷新 + 事件监听也可能导致额外�
 
 风险等级：低
 
-修复状态：待决策。
+修复状态：已修复。校园选择页的入驻入口已经改为通过登录校验后跳转到 `/pages/campus/join`，不再停留在“待开放”提示。
 
 相关位置：
-- `pages/campus/select.vue:347-348` — `goJoinPage()` 始终弹出 toast "🚧 校园入驻功能待开放"
+- `pages/campus/select.vue` — `goJoinPage()` 先调用 `requireLogin({ cloudOnly: true })`，通过后跳转到 `/pages/campus/join`
 - `pages/campus/join.vue` — 已完整实现入驻申请表单、云端提交、隐私协议等功能
 
-问题说明：`join.vue` 页面已经完整实现，但 `select.vue` 中的入口仍然提示"待开放"，用户无法从 UI 进入。这是一个入口不一致问题 — 要么是故意关闭了入口（功能未准备好），要么是遗漏了更新。
+问题说明：这个问题原本是“页面做完了，但入口没放开”。当前代码已经把入口接通，所以文档里的旧结论需要撤掉。
 
-建议：确认入驻功能是否要上线。如果要上线，修改 `goJoinPage()` 跳转到 `/pages/campus/join`；如果暂不上线，可在线上隐藏该入口。
+已处理：
+
+- 校园选择页和“我的”页都已接通入驻申请入口。
+- 未登录或本地登录用户会先经过 `requireLogin({ cloudOnly: true })` 校验。
 
 ---
 
@@ -902,7 +956,7 @@ onShow(refreshState)       // 重复刷新 + 事件监听也可能导致额外�
 
 ### 第二阶段：降低正常调用量
 
-1. 合并 `syncState` 和 `syncHistory` 为一次 `syncAppData`。
+1. 合并 `syncState` 和 `syncHistory` 为一次 `syncAppData`。（抽餐主流程已完成，通用同步路径仍可继续收敛）
 2. 修复 `detail.vue` 首屏重复 `loadStalls`。（已完成）
 3. 新增、编辑、删除后优先本地更新列表，减少整表重拉。
 4. 饭堂、档口、菜品增加本地 TTL 缓存。
@@ -916,7 +970,7 @@ onShow(refreshState)       // 重复刷新 + 事件监听也可能导致额外�
 
 ### 第四阶段：架构整理
 
-1. 所有前端云调用统一走 `utils/cloud.js`。
+1. 所有前端云调用统一走 `utils/cloud.js`。（已完成）
 2. 增加统一调用日志。
 3. 增加错误降级和限流提示。
 4. 建立云对象调用统计，观察真实用户行为。
