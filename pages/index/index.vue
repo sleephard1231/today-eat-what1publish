@@ -401,6 +401,9 @@ async function handleRequestAiPick() {
       selectedCanteenNames: popupSelectedCanteenNames.value
     })
     applyAiPick(aiPick, popupCandidates.value)
+    if (!aiPick.isAI) {
+      uni.showToast({ title: 'AI 暂时没接上，先按当前推荐来', icon: 'none' })
+    }
   } catch (err) {
     console.warn('[index] ai pick failed', err?.message || err)
     uni.showToast({ title: 'AI 暂时没想好，先吃这个也不错', icon: 'none' })

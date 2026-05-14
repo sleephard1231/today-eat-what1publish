@@ -120,6 +120,21 @@ button:active,
   font-size: 30rpx;
   font-weight: 700;
 }
+.service-entry__tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10rpx;
+  margin-top: 14rpx;
+}
+.service-entry__tag {
+  padding: 6rpx 14rpx;
+  border-radius: 999rpx;
+  background: rgba(255, 255, 255, 0.78);
+  color: #5e766e;
+  font-size: 20rpx;
+  font-weight: 600;
+  line-height: 1.2;
+}
 .service-entry__desc {
   margin-top: 12rpx;
   color: #96897e;
@@ -174,12 +189,22 @@ button:active,
   font-weight: 700;
   line-height: 1.35;
 }
+.login-mode-text {
+  display: block;
+  margin-top: 8rpx;
+  font-size: 22rpx;
+  line-height: 1.35;
+  font-weight: 700;
+}
 .profile-tagline {
   display: block;
   margin-top: 8rpx;
   color: #b0a398;
   font-size: 22rpx;
   line-height: 1.4;
+}
+.profile-tagline--secondary {
+  margin-top: 6rpx;
 }
 .picker-row {
   display: flex;

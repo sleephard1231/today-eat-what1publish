@@ -197,7 +197,7 @@ async function cloudIsCampusAdmin() {
     const co = getCoCampus();
     return await co.isAdmin(token);
   } catch (err) {
-    common_vendor.index.__f__("warn", "at utils/cloud.js:416", "[cloud] cloudIsCampusAdmin error", err);
+    common_vendor.index.__f__("warn", "at utils/cloud.js:448", "[cloud] cloudIsCampusAdmin error", err);
     return { code: -1, data: { isAdmin: false }, msg: "管理员身份校验失败" };
   }
 }
@@ -206,7 +206,7 @@ async function cloudSyncAppData(token, payload = {}) {
     const co = getCoUser();
     return await co.syncAppData(token, payload);
   } catch (err) {
-    common_vendor.index.__f__("warn", "at utils/cloud.js:426", "[cloud] cloudSyncAppData error", err);
+    common_vendor.index.__f__("warn", "at utils/cloud.js:458", "[cloud] cloudSyncAppData error", err);
     return { code: -1, msg: "应用数据同步失败" };
   }
 }
@@ -215,7 +215,7 @@ async function cloudGetNormalDishCandidates(limit = 80) {
     const co = getCoCampus();
     return await co.getNormalDishCandidates(limit);
   } catch (err) {
-    common_vendor.index.__f__("warn", "at utils/cloud.js:440", "[cloud] cloudGetNormalDishCandidates error", err);
+    common_vendor.index.__f__("warn", "at utils/cloud.js:472", "[cloud] cloudGetNormalDishCandidates error", err);
     return { code: -1, data: [], msg: "获取普通版菜品池失败" };
   }
 }
@@ -224,7 +224,7 @@ async function cloudGetCampusDishCandidates(canteenIds = [], limit = 120) {
     const co = getCoCampus();
     return await co.getCampusDishCandidates(canteenIds, limit);
   } catch (err) {
-    common_vendor.index.__f__("warn", "at utils/cloud.js:455", "[cloud] cloudGetCampusDishCandidates error", err);
+    common_vendor.index.__f__("warn", "at utils/cloud.js:487", "[cloud] cloudGetCampusDishCandidates error", err);
     return { code: -1, data: [], msg: "获取校园版菜品池失败" };
   }
 }
@@ -236,7 +236,7 @@ async function aiPickDishFromCandidates(payload = {}) {
     const co = getCoAi();
     return await co.pickDishFromCandidates(token, payload);
   } catch (err) {
-    common_vendor.index.__f__("warn", "at utils/cloud.js:483", "[cloud] aiPickDishFromCandidates error", err);
+    common_vendor.index.__f__("warn", "at utils/cloud.js:515", "[cloud] aiPickDishFromCandidates error", err);
     return { code: -1, msg: "AI 推荐失败" };
   }
 }

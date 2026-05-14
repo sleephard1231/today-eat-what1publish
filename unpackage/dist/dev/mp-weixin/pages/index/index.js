@@ -2,6 +2,7 @@
 const common_vendor = require("../../common/vendor.js");
 const common_data = require("../../common/data.js");
 const utils_appState = require("../../utils/app-state.js");
+const utils_privacyState = require("../../utils/privacy-state.js");
 const utils_userState = require("../../utils/user-state.js");
 const _sfc_main = {
   __name: "index",
@@ -168,6 +169,11 @@ const _sfc_main = {
     async function handleDrawMeal() {
       if (isDrawing.value)
         return;
+      if (!utils_privacyState.requirePrivacyAgreement({
+        content: "同意隐私政策和用户协议后，才能为你保存推荐状态和历史记录。"
+      })) {
+        return;
+      }
       clearRevealTimers();
       showResultPopup.value = false;
       const drawResult = await utils_appState.drawMealResultAsync();
@@ -192,6 +198,11 @@ const _sfc_main = {
     async function handleRequestAiPick() {
       if (isAiPicking.value || !popupResult.value)
         return;
+      if (!utils_privacyState.requirePrivacyAgreement({
+        content: "同意隐私政策和用户协议后，才能使用 AI 推荐。"
+      })) {
+        return;
+      }
       if (!utils_userState.requireLogin({
         cloudOnly: true,
         content: "登录后才能让 AI 再帮你挑一次。"
@@ -208,8 +219,11 @@ const _sfc_main = {
           selectedCanteenNames: popupSelectedCanteenNames.value
         });
         applyAiPick(aiPick, popupCandidates.value);
+        if (!aiPick.isAI) {
+          common_vendor.index.showToast({ title: "AI 暂时没接上，先按当前推荐来", icon: "none" });
+        }
       } catch (err) {
-        common_vendor.index.__f__("warn", "at pages/index/index.vue:394", "[index] ai pick failed", (err == null ? void 0 : err.message) || err);
+        common_vendor.index.__f__("warn", "at pages/index/index.vue:408", "[index] ai pick failed", (err == null ? void 0 : err.message) || err);
         common_vendor.index.showToast({ title: "AI 暂时没想好，先吃这个也不错", icon: "none" });
       } finally {
         isAiPicking.value = false;

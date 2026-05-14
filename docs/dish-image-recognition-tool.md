@@ -82,22 +82,34 @@
 
 ## 5. JSON 导出格式
 
-推荐 JSON 顶层使用对象，方便后续加版本号和来源信息：
+推荐 JSON 顶层使用对象，方便后续加版本号、来源信息和后台导入辅助字段：
 
 ```json
 {
-  "version": "1.0",
+  "version": "2.0",
   "source": "dish-image-recognition-tool",
   "exportedAt": "2026-05-04T13:00:00.000Z",
+  "meta": {
+    "toolVersion": "0.1.0",
+    "imageCount": 6,
+    "operator": "",
+    "notes": ""
+  },
   "dishes": [
     {
+      "localId": "img_001_dish_001",
+      "imageName": "menu-01.jpg",
+      "sourceType": "menu",
       "name": "蜜汁叉烧饭",
-      "category": "烧腊饭",
+      "category": "烧腊",
       "tag": "人气",
       "price": "15",
-      "vibe": "甜甜满足"
+      "vibe": "甜咸满足"
     },
     {
+      "localId": "img_001_dish_002",
+      "imageName": "menu-01.jpg",
+      "sourceType": "menu",
       "name": "番茄肥牛米线",
       "category": "粉面",
       "tag": "推荐",
@@ -108,7 +120,7 @@
 }
 ```
 
-后台如果后续做一键导入，可以只读取 `dishes` 数组。
+后台如果后续做一键导入，可以只读取 `dishes` 数组；`meta` 用来展示来源信息，`localId/imageName/sourceType` 用来辅助预检和人工校对，不进入正式菜品表。
 
 ## 6. Excel 导出模板
 
@@ -168,7 +180,7 @@ Excel 第一行固定为字段名：
 }
 ```
 
-导出时移除 `localId` 和 `imageName`。
+导出给后台预检时建议保留 `localId`、`imageName` 和 `sourceType`；正式写入 `eat-what-dishes` 时再移除这些辅助字段。
 
 ## 8. 服务端接口草案
 
@@ -353,3 +365,254 @@ DASHSCOPE_VL_MODEL=qwen-vl-max
 - 第一版识别结果必须人工校对后再进入后台。
 - 第一版导出只包含 `name`、`category`、`tag`、`price`、`vibe`。
 - 第一版优先保证结果可检查、可编辑、可导出，不追求全自动入库。
+
+## 16. 第二阶段对接方案
+
+第一阶段工具稳定后，第二阶段建议接入 admin 后台，但仍然保持“先预检、再导入”的双步骤，不做上传后直接写库。
+
+### 16.1 目标
+
+- 本地识别工具继续负责：识别、人工初步校对、导出 JSON。
+- admin 后台负责：选择档口、预检、二次修正、正式导入。
+- `co-campus` 负责：管理员鉴权、字段校验、重复检查、正式写入 `eat-what-dishes`。
+
+### 16.2 数据流
+
+```text
+本地识别工具导出 JSON
+  -> admin 导入页上传 JSON
+  -> co-campus.previewImportDishes()
+  -> admin 展示预检结果并允许人工修正
+  -> co-campus.batchImportDishes()
+  -> 正式写入 eat-what-dishes
+```
+
+### 16.3 admin 导入页建议
+
+建议新增页面：
+
+- `pages/eat-what/dish/import`
+
+页面职责分为 4 块：
+
+1. 归属选择
+   - 选择当前校园
+   - 选择当前饭堂
+   - 选择当前档口
+2. 文件上传
+   - 上传 `dish-image-recognition-tool` 导出的 JSON
+   - 显示 `version`、`source`、`exportedAt`
+3. 预检概览
+   - 总条数
+   - 可导入
+   - 需确认
+   - 不可导入
+   - 批内重名
+   - 库内重名
+4. 可编辑表格
+   - `name`
+   - `category`
+   - `tag`
+   - `price`
+   - `vibe`
+   - `imageName`
+   - `status`
+   - `issues`
+
+### 16.4 推荐的字段枚举
+
+为了减少同义词分裂，后台预检建议优先按固定枚举校验：
+
+`tag` 允许值：
+
+- `人气`
+- `新品`
+- `推荐`
+- `招牌`
+- `限时`
+
+`category` 建议值：
+
+- `主食`
+- `粉面`
+- `烧腊`
+- `小炒`
+- `面食`
+- `饮品`
+- `甜品`
+- `小吃`
+
+### 16.5 云对象接口
+
+建议在 `co-campus` 新增两个管理员接口：
+
+1. `previewImportDishes(token, payload)`
+2. `batchImportDishes(token, payload)`
+
+#### 16.5.1 `previewImportDishes`
+
+用途：
+
+- 校验导入目标档口是否正确
+- 校验 JSON 行结构
+- 标记批内重名和库内重名
+- 返回给 admin 可编辑预检表格
+
+请求示例：
+
+```json
+{
+  "canteenId": "gzcc-tongde",
+  "stallId": "gzcc-tongde-shaola",
+  "dishes": [
+    {
+      "localId": "img_001_dish_001",
+      "imageName": "menu-01.jpg",
+      "sourceType": "menu",
+      "name": "蜜汁叉烧饭",
+      "category": "烧腊",
+      "tag": "人气",
+      "price": "15",
+      "vibe": "甜咸满足"
+    }
+  ]
+}
+```
+
+返回示例：
+
+```json
+{
+  "code": 0,
+  "data": {
+    "summary": {
+      "total": 20,
+      "valid": 14,
+      "warning": 4,
+      "invalid": 2,
+      "duplicateInBatch": 1,
+      "duplicateInDb": 2
+    },
+    "rows": [
+      {
+        "localId": "img_001_dish_001",
+        "name": "蜜汁叉烧饭",
+        "category": "烧腊",
+        "tag": "人气",
+        "price": "15",
+        "vibe": "甜咸满足",
+        "imageName": "menu-01.jpg",
+        "status": "valid",
+        "issues": []
+      }
+    ]
+  }
+}
+```
+
+#### 16.5.2 `batchImportDishes`
+
+用途：
+
+- 对 admin 调整后的数据做最终校验
+- 按档口批量写入 `eat-what-dishes`
+- 统一生成 `sort`、`status`、`createdAt`、`updatedAt`
+
+请求示例：
+
+```json
+{
+  "canteenId": "gzcc-tongde",
+  "stallId": "gzcc-tongde-shaola",
+  "importMode": "skip_duplicate",
+  "dishes": [
+    {
+      "name": "蜜汁叉烧饭",
+      "category": "烧腊",
+      "tag": "人气",
+      "price": "15",
+      "vibe": "甜咸满足"
+    }
+  ]
+}
+```
+
+返回示例：
+
+```json
+{
+  "code": 0,
+  "data": {
+    "added": 15,
+    "skipped": 3,
+    "failed": 2,
+    "items": [
+      {
+        "name": "蜜汁叉烧饭",
+        "result": "added",
+        "id": "dish-001"
+      },
+      {
+        "name": "叉烧饭",
+        "result": "skipped",
+        "reason": "同档口已存在同名菜"
+      }
+    ]
+  },
+  "msg": "这批菜品已经整理进档口里了"
+}
+```
+
+### 16.6 预检规则建议
+
+文件级：
+
+- 顶层必须是对象
+- 必须包含 `version/source/dishes`
+- `dishes` 必须是数组
+- 单次建议不超过 `300` 条
+
+请求级：
+
+- `token` 必须是管理员
+- `canteenId` 必填
+- `stallId` 必填
+- `stallId` 必须属于 `canteenId`
+
+行级：
+
+- `name` 必填，建议不超过 30 字
+- `category` 可空，但若填写应尽量在枚举内
+- `tag` 可空，但若填写必须在允许列表内
+- `price` 可空，建议只允许数字、区间或 `x起`
+- `vibe` 可空，建议 2 到 8 个中文字符
+
+重复级：
+
+- 同一批 `name` 完全一致时，标记 `duplicate_in_batch`
+- 当前档口下已有同名菜时，标记 `duplicate_in_db`
+- 重复默认先提示，不自动删除
+
+### 16.7 正式入库字段
+
+正式写入 `eat-what-dishes` 时，建议只保留这些字段：
+
+- `stallId`
+- `canteenId`
+- `name`
+- `category`
+- `tag`
+- `price`
+- `vibe`
+- `sort`
+- `status`
+- `createdAt`
+- `updatedAt`
+
+以下字段只用于导入过程，不进入正式库：
+
+- `localId`
+- `imageName`
+- `sourceType`
+- `issues`
+- `status`（预检状态）

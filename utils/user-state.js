@@ -193,6 +193,33 @@ export function isCloudUser() {
   return user.loginMode === 'cloud' && !!user.token
 }
 
+export function getLoginStatusMeta() {
+  const user = getUser()
+  const loggedIn = Boolean(user.isLoggedIn)
+  const cloudUser = user.loginMode === 'cloud' && !!user.token
+  const localFallback = loggedIn && !cloudUser
+
+  let label = '未登录'
+  let description = '登录后才能同步历史、使用 AI 和云端能力。'
+
+  if (cloudUser) {
+    label = '云端登录'
+    description = '已连接云端，AI、同步和校园申请都可以正常使用。'
+  } else if (localFallback) {
+    label = '本地模式'
+    description = '当前没有连上云端，AI、同步和校园申请暂时不可用。'
+  }
+
+  return {
+    isLoggedIn: loggedIn,
+    isCloudUser: cloudUser,
+    isLocalFallback: localFallback,
+    loginMode: user.loginMode || 'local',
+    label,
+    description
+  }
+}
+
 export function requireLogin(options = {}) {
   const {
     cloudOnly = false,
@@ -201,20 +228,31 @@ export function requireLogin(options = {}) {
     redirect = true
   } = options
   const passed = cloudOnly ? isCloudUser() : isLoggedIn()
+  const loginStatus = getLoginStatusMeta()
 
   if (passed) {
     return true
   }
 
+  const resolvedTitle = cloudOnly && loginStatus.isLocalFallback
+    ? '还差一步云端登录'
+    : title
+  const resolvedContent = cloudOnly && loginStatus.isLocalFallback
+    ? '你现在是本地模式登录，这次没有连上云端，所以 AI 和云同步还不能用。请再登录一次，切到云端登录后再试。'
+    : content
+  const resolvedConfirmText = cloudOnly && loginStatus.isLocalFallback
+    ? '去重新登录'
+    : '去登录'
+
   if (!redirect) {
-    uni.showToast({ title: content, icon: 'none' })
+    uni.showToast({ title: resolvedContent, icon: 'none' })
     return false
   }
 
   uni.showModal({
-    title,
-    content,
-    confirmText: '去登录',
+    title: resolvedTitle,
+    content: resolvedContent,
+    confirmText: resolvedConfirmText,
     cancelText: '先不了',
     success: (res) => {
       if (res.confirm) {

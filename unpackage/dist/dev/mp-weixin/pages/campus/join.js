@@ -1,6 +1,7 @@
 "use strict";
 const common_vendor = require("../../common/vendor.js");
 const utils_appState = require("../../utils/app-state.js");
+const utils_privacyState = require("../../utils/privacy-state.js");
 const utils_userState = require("../../utils/user-state.js");
 const _sfc_main = {
   __name: "join",
@@ -133,6 +134,11 @@ const _sfc_main = {
       if (!validateForm()) {
         return;
       }
+      if (!utils_privacyState.requirePrivacyAgreement({
+        content: "同意隐私政策和用户协议后，才能提交校园入驻申请。"
+      })) {
+        return;
+      }
       if (!isDraftSaved.value) {
         utils_appState.saveCampusApplicationDraft({ ...form });
         isDraftSaved.value = true;
@@ -155,7 +161,7 @@ const _sfc_main = {
           campusTag: form.campusTag,
           city: form.city,
           contactName: form.nickName,
-          contactPhone: form.email
+          contactEmail: form.email
         });
         utils_appState.clearCampusApplicationDraft();
         common_vendor.index.showToast({

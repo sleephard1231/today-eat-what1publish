@@ -36,7 +36,7 @@
     },
     "providerType": {
       "bsonType": "string",
-      "description": "供应商类型，支持 dashscope/openai-compatible/openai/deepseek",
+      "description": "供应商类型，支持 dashscope/openai-compatible/anthropic-compatible/openai/deepseek",
       "title": "供应商类型",
       "defaultValue": "dashscope"
     },

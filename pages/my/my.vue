@@ -14,7 +14,9 @@
         </view>
         <view class="profile-copy">
           <text class="nickname">{{ user.isLoggedIn ? user.nickname : '点击授权微信登录' }}</text>
+          <text v-if="user.isLoggedIn" class="login-mode-text" :style="loginModeTextStyle">{{ loginStatusLabel }}</text>
           <text class="profile-tagline">{{ profileHeadline }}</text>
+          <text class="profile-tagline profile-tagline--secondary">{{ loginStatusDescription }}</text>
         </view>
       </view>
 
@@ -57,6 +59,16 @@
     </view>
 
     <text class="section-label">常用功能</text>
+    <view v-if="isCampusMode" class="service-entry press-feedback" :style="serviceEntryStyle" hover-class="press-feedback--active" hover-start-time="20" hover-stay-time="90" @click="goServicePage">
+      <view class="service-entry__copy">
+        <text class="service-entry__eyebrow">🏫 校园生活服务</text>
+        <text class="service-entry__title">按当前学校解锁对应服务</text>
+        <view v-if="openedCampusServiceTags.length" class="service-entry__tags">
+          <text v-for="tag in openedCampusServiceTags" :key="tag" class="service-entry__tag">{{ tag }}</text>
+        </view>
+      </view>
+      <text class="service-entry__action" :style="serviceEntryActionStyle">进入</text>
+    </view>
     <view class="section-card" :style="cardStyle">
       <view class="row-item press-feedback" hover-class="press-feedback--active" hover-start-time="20" hover-stay-time="90" @click="goHistoryPage">
         <view>
@@ -87,14 +99,7 @@
         </view>
       </view>
 
-      <view class="service-entry press-feedback" :style="serviceEntryStyle" hover-class="press-feedback--active" hover-start-time="20" hover-stay-time="90" @click="goServicePage">
-        <view class="service-entry__copy">
-          <text class="service-entry__eyebrow">🏫 校园专属服务</text>
-          <text class="service-entry__title">按当前学校解锁对应服务</text>
-          <text class="service-entry__desc">按学校自动解锁专属服务</text>
-        </view>
-        <text class="service-entry__action" :style="serviceEntryActionStyle">进入</text>
-      </view>
+
     </template>
 
     <!-- 底部法律链接 -->
@@ -261,7 +266,7 @@
 <script setup>
 import { computed, reactive, ref } from 'vue'
 import { onLoad, onShow, onUnload } from '@dcloudio/uni-app'
-import { mbtiCardOptions, zodiacCardOptions } from '@/common/data.js'
+import { campusServiceMap, mbtiCardOptions, zodiacCardOptions } from '@/common/data.js'
 import {
   applyTabBarTheme,
   getAppState,
@@ -273,7 +278,7 @@ import {
   saveAppState
 } from '@/utils/app-state.js'
 import { requirePrivacyAgreement } from '@/utils/privacy-state.js'
-import { getUser, saveUser, clearUser, consumeLoginIntent, handleLogin as cloudLogin, isCloudUser, requireLogin, syncProfileToCloud, uploadAvatarToCloud } from '@/utils/user-state.js'
+import { getUser, saveUser, clearUser, consumeLoginIntent, getLoginStatusMeta, handleLogin as cloudLogin, isCloudUser, requireLogin, syncProfileToCloud, uploadAvatarToCloud } from '@/utils/user-state.js'
 
 const statusBarHeight = uni.getWindowInfo().statusBarHeight || 20
 const menuButtonRect = typeof uni.getMenuButtonBoundingClientRect === 'function'
@@ -344,6 +349,13 @@ const topCardMargin = computed(() => (
     : statusBarHeight + 42
 ))
 const profileHeadline = computed(() => `${currentZodiacCard.value.value} · ${currentMbtiCard.value.funAlias}`)
+const loginStatus = computed(() => getLoginStatusMeta())
+const loginStatusLabel = computed(() => loginStatus.value.label)
+const loginStatusDescription = computed(() => (
+  user.value.isLoggedIn
+    ? loginStatus.value.description
+    : '登录后才能同步历史、使用 AI 和云端能力。'
+))
 
 const selectedCanteenText = computed(() => {
   const selected = getSelectedCanteen(state.value.campusId)
@@ -355,6 +367,12 @@ const campusDescription = computed(() => (
     ? selectedCanteenText.value
     : '普通版已开启，会优先推荐附近的人气选择。'
 ))
+
+const openedCampusServiceTags = computed(() => {
+  if (!isCampusMode.value) return []
+  const services = campusServiceMap[currentCampus.value.name] || []
+  return services.slice(0, 4).map((item) => item.name)
+})
 
 const pageStyle = computed(() => ({
   minHeight: '100vh',
@@ -412,6 +430,10 @@ const ghostButtonStyle = computed(() => ({
   background: theme.value.accentSoft,
   color: theme.value.accent,
   border: `1px solid ${theme.value.border}`
+}))
+
+const loginModeTextStyle = computed(() => ({
+  color: loginStatus.value.isCloudUser ? theme.value.accent : '#c78357'
 }))
 
 function selectorCardStyle(isActive) {
@@ -511,7 +533,13 @@ async function handleLogin() {
     if (loginMode === 'cloud') {
       uni.showToast({ title: '登录成功', icon: 'none' })
     } else {
-      uni.showToast({ title: '本地模式登录（云端不可用）', icon: 'none' })
+      const fallbackMsg = result.fallbackMsg || '云端登录暂时不可用'
+      uni.showModal({
+        title: '已切到本地模式',
+        content: `云端登录失败：${fallbackMsg}。这次先用本地模式顶一下，所以 AI、校园申请和云端同步暂时还不能用。`,
+        showCancel: false,
+        confirmText: '知道了'
+      })
     }
   } catch (error) {
     console.warn('handleLogin failed', error)
@@ -672,6 +700,8 @@ function goUserAgreement() {
 .service-entry__eyebrow, .service-entry__title, .service-entry__desc { display: block; }
 .service-entry__eyebrow { color: #2f251d; font-size: 32rpx; font-weight: 700; }
 .service-entry__title { margin-top: 14rpx; color: #3c3027; font-size: 30rpx; font-weight: 700; }
+.service-entry__tags { display: flex; flex-wrap: wrap; gap: 10rpx; margin-top: 14rpx; }
+.service-entry__tag { padding: 6rpx 14rpx; border-radius: 999rpx; background: rgba(255,255,255,0.78); color: #5e766e; font-size: 20rpx; font-weight: 600; line-height: 1.2; }
 .service-entry__desc { margin-top: 12rpx; color: #96897e; font-size: 25rpx; line-height: 1.6; }
 .service-entry__action { flex-shrink: 0; padding: 18rpx 24rpx; border-radius: 24rpx; font-size: 28rpx; font-weight: 700; }
 .profile-top { display: flex; align-items: center; gap: 22rpx; }
@@ -680,7 +710,9 @@ function goUserAgreement() {
 .avatar--img { width: 116rpx; height: 116rpx; }
 .profile-copy { flex: 1; }
 .nickname { display: block; color: #32271f; font-size: 38rpx; font-weight: 700; line-height: 1.35; }
+.login-mode-text { display: block; margin-top: 8rpx; font-size: 22rpx; line-height: 1.35; font-weight: 700; }
 .profile-tagline { display: block; margin-top: 8rpx; color: #b0a398; font-size: 22rpx; line-height: 1.4; }
+.profile-tagline--secondary { margin-top: 6rpx; }
 .picker-row { display: flex; gap: 18rpx; margin-top: 28rpx; }
 .picker-item { flex: 1; }
 .picker-chip { border-radius: 28rpx; background: rgba(255,255,255,0.72); text-align: center; font-size: 28rpx; font-weight: 700; }

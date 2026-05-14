@@ -1,5 +1,6 @@
 "use strict";
 const common_vendor = require("../../common/vendor.js");
+const utils_privacyState = require("../../utils/privacy-state.js");
 const privacyContent = `
 <h2 style="font-size:18px;font-weight:700;margin-bottom:16px;">隐私政策</h2>
 <p style="font-size:14px;line-height:2;color:#555;">
@@ -72,8 +73,11 @@ const _sfc_main = {
     const statusBarHeight = common_vendor.index.getWindowInfo().statusBarHeight || 20;
     const pageTitle = common_vendor.ref("");
     const content = common_vendor.ref("");
+    const currentType = common_vendor.ref("privacy");
+    const isPrivacyPage = common_vendor.computed(() => currentType.value === "privacy");
     common_vendor.onLoad((options) => {
       const type = (options == null ? void 0 : options.url) || "privacy";
+      currentType.value = type;
       if (type === "privacy") {
         pageTitle.value = "隐私政策";
         content.value = privacyContent;
@@ -85,13 +89,23 @@ const _sfc_main = {
     function goBack() {
       common_vendor.index.navigateBack();
     }
+    function handleAgreePrivacy() {
+      utils_privacyState.agreePrivacy();
+      common_vendor.index.showToast({ title: "已同意", icon: "none" });
+      setTimeout(() => {
+        common_vendor.index.navigateBack();
+      }, 300);
+    }
     return (_ctx, _cache) => {
-      return {
+      return common_vendor.e({
         a: common_vendor.o(goBack, "9b"),
         b: common_vendor.t(pageTitle.value),
         c: `${common_vendor.unref(statusBarHeight) + 12}px`,
-        d: content.value
-      };
+        d: content.value,
+        e: isPrivacyPage.value
+      }, isPrivacyPage.value ? {
+        f: common_vendor.o(handleAgreePrivacy, "bf")
+      } : {});
     };
   }
 };

@@ -130,7 +130,7 @@ button:active,
   margin-top: 28rpx;
 }
 .service-card {
-  min-height: 220rpx;
+  min-height: 240rpx;
   border-radius: 30rpx;
   padding: 28rpx 24rpx;
 }
@@ -160,6 +160,128 @@ button:active,
   font-size: 24rpx;
   line-height: 1.6;
 }
+.service-link {
+  display: block;
+  margin-top: 18rpx;
+  color: #67b6a0;
+  font-size: 22rpx;
+  font-weight: 600;
+}
 .empty-card {
   text-align: center;
+}
+.service-detail-mask {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  display: flex;
+  align-items: flex-end;
+  background: rgba(47, 37, 29, 0.22);
+  padding: 24rpx;
+  box-sizing: border-box;
+}
+.service-detail-sheet {
+  width: 100%;
+  border-radius: 36rpx;
+  padding: 22rpx 28rpx 30rpx;
+  box-sizing: border-box;
+}
+.sheet-handle {
+  width: 88rpx;
+  height: 8rpx;
+  border-radius: 999rpx;
+  margin: 0 auto 20rpx;
+  background: rgba(152, 141, 131, 0.28);
+}
+.sheet-head {
+  display: flex;
+  align-items: center;
+  gap: 18rpx;
+}
+.sheet-icon-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 92rpx;
+  height: 92rpx;
+  border-radius: 28rpx;
+  flex-shrink: 0;
+}
+.sheet-icon {
+  font-size: 42rpx;
+}
+.sheet-head-copy {
+  min-width: 0;
+  flex: 1;
+}
+.sheet-title {
+  display: block;
+  color: #2f251d;
+  font-size: 34rpx;
+  font-weight: 700;
+}
+.sheet-subtitle {
+  display: block;
+  margin-top: 8rpx;
+  color: #93867b;
+  font-size: 24rpx;
+  line-height: 1.5;
+}
+.sheet-desc {
+  display: block;
+  margin-top: 22rpx;
+  color: #4d4137;
+  font-size: 27rpx;
+  line-height: 1.75;
+}
+.sheet-tips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14rpx;
+  margin-top: 20rpx;
+}
+.sheet-tip {
+  padding: 10rpx 18rpx;
+  border-radius: 999rpx;
+  background: rgba(255, 255, 255, 0.74);
+  color: #5c6c66;
+  font-size: 23rpx;
+}
+.sheet-note {
+  margin-top: 22rpx;
+  padding: 22rpx;
+  border-radius: 24rpx;
+  background: rgba(255, 255, 255, 0.72);
+}
+.sheet-note__title {
+  display: block;
+  color: #2f251d;
+  font-size: 26rpx;
+  font-weight: 700;
+}
+.sheet-note__desc {
+  display: block;
+  margin-top: 10rpx;
+  color: #8b8076;
+  font-size: 24rpx;
+  line-height: 1.65;
+}
+.sheet-action {
+  width: 100%;
+  margin-top: 18rpx;
+  border-radius: 24rpx;
+  font-size: 28rpx;
+  line-height: 92rpx;
+}
+.sheet-action::after {
+  border: 0;
+}
+.sheet-action--primary {
+  color: #ffffff;
+  background: linear-gradient(135deg, #67b6a0, #4f9f8a);
+  box-shadow: 0 18rpx 38rpx rgba(103, 182, 160, 0.24);
+}
+.sheet-action--ghost {
+  color: #6f6258;
+  background: rgba(255, 255, 255, 0.78);
 }

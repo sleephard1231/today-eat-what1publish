@@ -1,20 +1,40 @@
 "use strict";
 const common_vendor = require("../../common/vendor.js");
 const utils_appState = require("../../utils/app-state.js");
+const utils_userState = require("../../utils/user-state.js");
 const _sfc_main = {
   __name: "index",
   setup(__props) {
     const statusBarHeight = common_vendor.index.getWindowInfo().statusBarHeight || 20;
     const state = common_vendor.ref(utils_appState.getAppState());
-    const historyList = common_vendor.ref(utils_appState.getHistoryList());
+    const historyList = common_vendor.ref([]);
+    let hasPromptedLogin = false;
     const refreshData = () => {
       state.value = utils_appState.getAppState();
       historyList.value = utils_appState.getHistoryList();
     };
+    function ensureHistoryLogin() {
+      const passed = utils_userState.requireLogin({
+        content: "登录后才能查看你的历史记录。",
+        redirect: !hasPromptedLogin
+      });
+      if (passed) {
+        hasPromptedLogin = false;
+        return true;
+      }
+      hasPromptedLogin = true;
+      return false;
+    }
     common_vendor.onLoad(() => {
+      if (!ensureHistoryLogin()) {
+        return;
+      }
       refreshData();
     });
     common_vendor.onShow(() => {
+      if (!ensureHistoryLogin()) {
+        return;
+      }
       refreshData();
     });
     const theme = common_vendor.computed(() => utils_appState.getTheme(state.value.mode));

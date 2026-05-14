@@ -399,6 +399,38 @@ export async function cloudDeleteDish(stallId, dishId) {
   }
 }
 
+/**
+ * 预检菜品批量导入数据
+ * @param {object} payload - { canteenId, stallId, dishes }
+ */
+export async function cloudPreviewImportDishes(payload = {}) {
+  try {
+    const token = getStoredUserToken()
+    if (!token) return { code: -1, msg: '请先使用管理员账号登录' }
+    const co = getCoCampus()
+    return await co.previewImportDishes(token, payload)
+  } catch (err) {
+    console.warn('[cloud] cloudPreviewImportDishes error', err)
+    return { code: -1, msg: '预检导入数据失败' }
+  }
+}
+
+/**
+ * 批量导入菜品
+ * @param {object} payload - { canteenId, stallId, importMode, dishes }
+ */
+export async function cloudBatchImportDishes(payload = {}) {
+  try {
+    const token = getStoredUserToken()
+    if (!token) return { code: -1, msg: '请先使用管理员账号登录' }
+    const co = getCoCampus()
+    return await co.batchImportDishes(token, payload)
+  } catch (err) {
+    console.warn('[cloud] cloudBatchImportDishes error', err)
+    return { code: -1, msg: '批量导入菜品失败' }
+  }
+}
+
 // ====== AI 推荐理由 ======
 
 /**

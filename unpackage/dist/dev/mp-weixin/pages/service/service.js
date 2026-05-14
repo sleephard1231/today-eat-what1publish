@@ -16,6 +16,7 @@ const _sfc_main = {
     const theme = common_vendor.computed(() => utils_appState.getTheme(state.value.mode));
     const currentCampus = common_vendor.computed(() => utils_appState.getCampusById(state.value.campusId));
     const serviceList = common_vendor.computed(() => common_data.campusServiceMap[currentCampus.value.name] || []);
+    const activeService = common_vendor.ref(null);
     const pageStyle = common_vendor.computed(() => ({
       minHeight: "100vh",
       padding: "0 32rpx 120rpx",
@@ -32,6 +33,12 @@ const _sfc_main = {
     }));
     function goBack() {
       common_vendor.index.navigateBack();
+    }
+    function openServiceDetail(service) {
+      activeService.value = service;
+    }
+    function closeServiceDetail() {
+      activeService.value = null;
     }
     return (_ctx, _cache) => {
       return common_vendor.e({
@@ -51,7 +58,8 @@ const _sfc_main = {
             a: common_vendor.t(service.icon),
             b: common_vendor.t(service.name),
             c: common_vendor.t(service.remark),
-            d: service.id
+            d: service.id,
+            e: common_vendor.o(($event) => openServiceDetail(service), service.id)
           };
         }),
         j: common_vendor.s(iconWrapStyle.value),
@@ -61,7 +69,30 @@ const _sfc_main = {
         m: common_vendor.t(isCampusMode.value ? "后面接入后台后，这里会按学校自动补齐更多服务内容。" : "你可以先去切换校园版，再回来看看学校专属服务。"),
         n: common_vendor.s(cardStyle.value)
       }, {
-        o: common_vendor.s(pageStyle.value)
+        o: activeService.value
+      }, activeService.value ? common_vendor.e({
+        p: common_vendor.t(activeService.value.icon),
+        q: common_vendor.s(iconWrapStyle.value),
+        r: common_vendor.t(activeService.value.name),
+        s: common_vendor.t(activeService.value.remark),
+        t: common_vendor.t(activeService.value.description || activeService.value.remark),
+        v: activeService.value.detailTips && activeService.value.detailTips.length
+      }, activeService.value.detailTips && activeService.value.detailTips.length ? {
+        w: common_vendor.f(activeService.value.detailTips, (tip, k0, i0) => {
+          return {
+            a: common_vendor.t(tip),
+            b: tip
+          };
+        })
+      } : {}, {
+        x: common_vendor.t(activeService.value.consultHint || "会通过微信里的官方客服能力继续沟通。"),
+        y: common_vendor.o(closeServiceDetail, "8d"),
+        z: common_vendor.s(cardStyle.value),
+        A: common_vendor.o(() => {
+        }, "6b"),
+        B: common_vendor.o(closeServiceDetail, "a4")
+      }) : {}, {
+        C: common_vendor.s(pageStyle.value)
       });
     };
   }

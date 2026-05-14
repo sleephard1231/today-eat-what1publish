@@ -2,6 +2,8 @@
 const common_vendor = require("../common/vendor.js");
 const utils_cloud = require("./cloud.js");
 const USER_KEY = "eat-what-user";
+const LOGIN_INTENT_KEY = "eat-what-login-intent";
+const CLOUD_FILE_PREFIX = "cloud://";
 const defaultUser = {
   openId: "",
   sessionKey: "",
@@ -24,8 +26,11 @@ function safeWrite(key, value) {
   try {
     common_vendor.index.setStorageSync(key, value);
   } catch (error) {
-    common_vendor.index.__f__("warn", "at utils/user-state.js:37", "storage write failed", error);
+    common_vendor.index.__f__("warn", "at utils/user-state.js:39", "storage write failed", error);
   }
+}
+function isTempAvatarPath(path = "") {
+  return Boolean(path) && !path.startsWith(CLOUD_FILE_PREFIX) && !/^https?:\/\//.test(path);
 }
 function getUser() {
   return safeRead(USER_KEY, defaultUser);
@@ -41,6 +46,35 @@ function clearUser() {
   safeWrite(USER_KEY, { ...defaultUser });
   common_vendor.index.$emit("user-state-changed");
 }
+async function uploadAvatarToCloud(tempFilePath = "") {
+  if (!isTempAvatarPath(tempFilePath)) {
+    return tempFilePath;
+  }
+  try {
+    const extMatch = tempFilePath.match(/\.(jpg|jpeg|png|webp)$/i);
+    const ext = extMatch ? extMatch[1].toLowerCase() : "jpg";
+    const cloudPath = `avatars/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+    const result = await common_vendor._r.uploadFile({
+      filePath: tempFilePath,
+      cloudPath
+    });
+    return result.fileID || tempFilePath;
+  } catch (error) {
+    common_vendor.index.__f__("warn", "at utils/user-state.js:81", "[user-state] upload avatar failed", error);
+    return "";
+  }
+}
+function consumeLoginIntent() {
+  try {
+    const value = common_vendor.index.getStorageSync(LOGIN_INTENT_KEY);
+    if (value) {
+      common_vendor.index.removeStorageSync(LOGIN_INTENT_KEY);
+    }
+    return Boolean(value);
+  } catch (error) {
+    return false;
+  }
+}
 async function wxCloudLogin(userInfo = {}) {
   const result = await utils_cloud.cloudWxLogin(userInfo);
   if (result.code === 0 && result.data) {
@@ -54,7 +88,7 @@ async function wxCloudLogin(userInfo = {}) {
     });
     return { code: 0, data: result.data, loginMode: "cloud" };
   }
-  common_vendor.index.__f__("warn", "at utils/user-state.js:82", "[user-state] 云端登录失败，降级为本地登录:", result.msg);
+  common_vendor.index.__f__("warn", "at utils/user-state.js:121", "[user-state] 云端登录失败，降级为本地登录:", result.msg);
   return { code: result.code, msg: result.msg, loginMode: "local" };
 }
 function localLogin(userInfo = {}) {
@@ -95,12 +129,35 @@ async function syncProfileToCloud(profileData = {}) {
   try {
     await utils_cloud.cloudUpdateProfile(user.token, profileData);
   } catch (err) {
-    common_vendor.index.__f__("warn", "at utils/user-state.js:145", "[user-state] 同步资料到云端失败", err);
+    common_vendor.index.__f__("warn", "at utils/user-state.js:184", "[user-state] 同步资料到云端失败", err);
   }
 }
 function isCloudUser() {
   const user = getUser();
   return user.loginMode === "cloud" && !!user.token;
+}
+function getLoginStatusMeta() {
+  const user = getUser();
+  const loggedIn = Boolean(user.isLoggedIn);
+  const cloudUser = user.loginMode === "cloud" && !!user.token;
+  const localFallback = loggedIn && !cloudUser;
+  let label = "未登录";
+  let description = "登录后才能同步历史、使用 AI 和云端能力。";
+  if (cloudUser) {
+    label = "云端登录";
+    description = "已连接云端，AI、同步和校园申请都可以正常使用。";
+  } else if (localFallback) {
+    label = "本地模式";
+    description = "当前没有连上云端，AI、同步和校园申请暂时不可用。";
+  }
+  return {
+    isLoggedIn: loggedIn,
+    isCloudUser: cloudUser,
+    isLocalFallback: localFallback,
+    loginMode: user.loginMode || "local",
+    label,
+    description
+  };
 }
 function requireLogin(options = {}) {
   const {
@@ -110,20 +167,25 @@ function requireLogin(options = {}) {
     redirect = true
   } = options;
   const passed = cloudOnly ? isCloudUser() : isLoggedIn();
+  const loginStatus = getLoginStatusMeta();
   if (passed) {
     return true;
   }
+  const resolvedTitle = cloudOnly && loginStatus.isLocalFallback ? "还差一步云端登录" : title;
+  const resolvedContent = cloudOnly && loginStatus.isLocalFallback ? "你现在是本地模式登录，这次没有连上云端，所以 AI 和云同步还不能用。请再登录一次，切到云端登录后再试。" : content;
+  const resolvedConfirmText = cloudOnly && loginStatus.isLocalFallback ? "去重新登录" : "去登录";
   if (!redirect) {
-    common_vendor.index.showToast({ title: content, icon: "none" });
+    common_vendor.index.showToast({ title: resolvedContent, icon: "none" });
     return false;
   }
   common_vendor.index.showModal({
-    title,
-    content,
-    confirmText: "去登录",
+    title: resolvedTitle,
+    content: resolvedContent,
+    confirmText: resolvedConfirmText,
     cancelText: "先不了",
     success: (res) => {
       if (res.confirm) {
+        safeWrite(LOGIN_INTENT_KEY, Date.now());
         common_vendor.index.switchTab({ url: "/pages/my/my" });
       }
     }
@@ -131,10 +193,13 @@ function requireLogin(options = {}) {
   return false;
 }
 exports.clearUser = clearUser;
+exports.consumeLoginIntent = consumeLoginIntent;
+exports.getLoginStatusMeta = getLoginStatusMeta;
 exports.getUser = getUser;
 exports.handleLogin = handleLogin;
 exports.isCloudUser = isCloudUser;
 exports.requireLogin = requireLogin;
 exports.saveUser = saveUser;
 exports.syncProfileToCloud = syncProfileToCloud;
+exports.uploadAvatarToCloud = uploadAvatarToCloud;
 //# sourceMappingURL=../../.sourcemap/mp-weixin/utils/user-state.js.map

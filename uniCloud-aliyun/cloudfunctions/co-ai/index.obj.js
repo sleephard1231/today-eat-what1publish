@@ -15,8 +15,9 @@ const DASHSCOPE_API_KEY = '你的dashscope-api-key'
 // 小程序管理员 openid 兜底校验；后台 uni-admin 会优先走 uni-id 管理员角色校验。
 const ADMIN_OPENIDS = [] // 如 ['oXXXXXXXXXXXX']
 
-// DashScope API 地址
-const DASHSCOPE_URL = 'https://dashscope.aliyuncs.com/api/v1/services/aigc/text-generation/generation'
+// DashScope API 地址。优先使用阿里云百炼 OpenAI 兼容接口，旧 text-generation 地址仍兼容。
+const DASHSCOPE_URL = 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions'
+const DASHSCOPE_LEGACY_URL = 'https://dashscope.aliyuncs.com/api/v1/services/aigc/text-generation/generation'
 
 // 限流：每用户每分钟最多5次
 const RATE_LIMIT_WINDOW = 60 * 1000
@@ -47,7 +48,7 @@ const DEFAULT_AI_CONFIG = {
   websiteUrl: 'https://dashscope.aliyun.com',
   apiUrl: DASHSCOPE_URL,
   useFullUrl: true,
-  model: 'qwen-turbo',
+  model: 'qwen-plus',
   dailyLimit: DAILY_PICK_LIMIT_MAX,
   minuteLimit: PICK_RATE_LIMIT_MAX,
   promptStyle: '朋友聊天',
@@ -244,6 +245,7 @@ function normalizeAiConfig(config = {}) {
 }
 
 function getDefaultProviderName(providerType) {
+  if (providerType === 'anthropic-compatible') return 'Anthropic 兼容接口'
   if (providerType === 'openai-compatible') return 'OpenAI 兼容接口'
   if (providerType === 'openai') return 'OpenAI'
   if (providerType === 'deepseek') return 'DeepSeek'
@@ -253,16 +255,40 @@ function getDefaultProviderName(providerType) {
 function getDefaultModel(providerType) {
   if (providerType === 'openai') return 'gpt-4o-mini'
   if (providerType === 'deepseek') return 'deepseek-chat'
+  if (providerType === 'anthropic-compatible') return 'kimi-k2.5'
   if (providerType === 'openai-compatible') return 'gpt-4o-mini'
   return DEFAULT_AI_CONFIG.model
+}
+
+function isDashScopeLegacyUrl(url = '') {
+  return /\/api\/v1\/services\/aigc\/text-generation\/generation\/?$/.test(String(url || ''))
 }
 
 function normalizeApiUrl(config) {
   const raw = String(config.apiUrl || '').trim()
   if (config.providerType === 'dashscope') {
-    return raw || DASHSCOPE_URL
+    if (!raw) return DASHSCOPE_URL
+    if (config.useFullUrl || isDashScopeLegacyUrl(raw) || /\/chat\/completions\/?$/.test(raw)) {
+      return raw
+    }
+    if (/\/compatible-mode\/v1\/?$/.test(raw)) {
+      return `${raw.replace(/\/$/, '')}/chat/completions`
+    }
+    return `${raw.replace(/\/$/, '')}/v1/chat/completions`
   }
   if (!raw) return 'https://api.openai.com/v1/chat/completions'
+  if (config.providerType === 'anthropic-compatible') {
+    if (/\/messages\/?$/.test(raw)) {
+      return raw
+    }
+    if (config.useFullUrl) {
+      return raw
+    }
+    if (/\/v1\/?$/.test(raw)) {
+      return `${raw.replace(/\/$/, '')}/messages`
+    }
+    return `${raw.replace(/\/$/, '')}/v1/messages`
+  }
   if (config.useFullUrl || /\/chat\/completions\/?$/.test(raw)) {
     return raw
   }
@@ -270,9 +296,10 @@ function normalizeApiUrl(config) {
 }
 
 function buildChatRequest(config, messages, options = {}) {
-  if (config.providerType === 'dashscope') {
+  const apiUrl = normalizeApiUrl(config)
+  if (config.providerType === 'dashscope' && isDashScopeLegacyUrl(apiUrl)) {
     return {
-      url: normalizeApiUrl(config),
+      url: apiUrl,
       body: {
         model: config.model || DEFAULT_AI_CONFIG.model,
         input: { messages },
@@ -286,8 +313,32 @@ function buildChatRequest(config, messages, options = {}) {
     }
   }
 
+  if (config.providerType === 'anthropic-compatible') {
+    const systemMessages = messages
+      .filter((message) => message.role === 'system')
+      .map((message) => message.content)
+      .filter(Boolean)
+    const chatMessages = messages
+      .filter((message) => message.role !== 'system')
+      .map((message) => ({
+        role: message.role === 'assistant' ? 'assistant' : 'user',
+        content: String(message.content || '')
+      }))
+
+    return {
+      url: apiUrl,
+      body: {
+        model: config.model,
+        system: systemMessages.join('\n'),
+        messages: chatMessages.length ? chatMessages : [{ role: 'user', content: '' }],
+        temperature: options.temperature === undefined ? 0.7 : options.temperature,
+        max_tokens: options.maxTokens || 120
+      }
+    }
+  }
+
   return {
-    url: normalizeApiUrl(config),
+    url: apiUrl,
     body: {
       model: config.model,
       messages,
@@ -300,6 +351,7 @@ function buildChatRequest(config, messages, options = {}) {
 async function requestChatCompletion(config, messages, options = {}) {
   const apiKey = resolveApiKey(config)
   const request = buildChatRequest(config, messages, options)
+  const isDashScopeLegacy = config.providerType === 'dashscope' && isDashScopeLegacyUrl(request.url)
   const res = await uniCloud.httpclient.request(request.url, {
     method: 'POST',
     dataType: 'json',
@@ -313,7 +365,7 @@ async function requestChatCompletion(config, messages, options = {}) {
   })
 
   const data = res.data || {}
-  if (config.providerType === 'dashscope') {
+  if (isDashScopeLegacy) {
     const content = (((data.output || {}).choices || [])[0] || {}).message?.content || ''
     const usage = data.usage || {}
     const promptTokens = Number(usage.input_tokens || usage.prompt_tokens || 0)
@@ -321,6 +373,24 @@ async function requestChatCompletion(config, messages, options = {}) {
     return {
       content: String(content || '').trim(),
       model: data.output?.model || config.model,
+      usage: {
+        promptTokens,
+        completionTokens,
+        totalTokens: Number(usage.total_tokens || (promptTokens + completionTokens) || 0)
+      },
+      raw: data
+    }
+  }
+
+  if (config.providerType === 'anthropic-compatible') {
+    const firstContent = Array.isArray(data.content) ? data.content[0] : null
+    const content = firstContent?.text || data.completion || ''
+    const usage = data.usage || {}
+    const promptTokens = Number(usage.input_tokens || 0)
+    const completionTokens = Number(usage.output_tokens || 0)
+    return {
+      content: String(content || '').trim(),
+      model: data.model || config.model,
       usage: {
         promptTokens,
         completionTokens,
@@ -779,6 +849,7 @@ module.exports = {
       updatedAt: now,
       updatedBy: admin.uid || admin.openid || ''
     }
+    delete saveData._id
 
     const { data } = await aiConfigCollection.doc(AI_CONFIG_ID).get()
     if (data && data.length) {
@@ -823,7 +894,7 @@ module.exports = {
       ], {
         temperature: 0.1,
         maxTokens: 20,
-        timeout: 5000
+        timeout: 15000
       })
 
       if (result.content) {

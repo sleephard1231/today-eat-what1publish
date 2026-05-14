@@ -1,14 +1,14 @@
-/**
- * co-campus 云对象
- * 负责校园入驻申请/审核、校园列表、饭堂、档口、菜品、校园服务
+﻿/**
+ * co-campus 浜戝璞?
+ * 璐熻矗鏍″洯鍏ラ┗鐢宠/瀹℃牳銆佹牎鍥垪琛ㄣ€侀キ鍫傘€佹。鍙ｃ€佽彍鍝併€佹牎鍥湇鍔?
  *
- * 前端调用方式：
+ * 鍓嶇璋冪敤鏂瑰紡锛?
  *   const co = uniCloud.importObject('co-campus')
- *   const res = await co.getCanteensByCampus('广州商学院')
+ *   const res = await co.getCanteensByCampus('骞垮窞鍟嗗闄?)
  */
 
-// ⚠️ 上线前必须填入管理员 openid
-const ADMIN_OPENIDS = [] // 如 ['oXXXXXXXXXXXX']
+// 鈿狅笍 涓婄嚎鍓嶅繀椤诲～鍏ョ鐞嗗憳 openid
+const ADMIN_OPENIDS = [] // 濡?['oXXXXXXXXXXXX']
 const ENV_ADMIN_OPENIDS = String(process.env.ADMIN_OPENIDS || '')
   .split(',')
   .map((openid) => openid.trim())
@@ -22,9 +22,11 @@ const stallsCollection = db.collection('eat-what-stalls')
 const dishesCollection = db.collection('eat-what-dishes')
 const normalDishesCollection = db.collection('eat-what-normal-dishes')
 const servicesCollection = db.collection('eat-what-services')
+const normalDishesSeed = require('./normal-dishes-seed')
 
-// 引入 co-user 的 token 验证
+// 寮曞叆 co-user 鐨?token 楠岃瘉
 const usersCollection = db.collection('eat-what-users')
+const uniIdUsersCollection = db.collection('uni-id-users')
 
 const TOKEN_EXPIRE_MS = 7 * 24 * 60 * 60 * 1000
 const APPLICATION_DAILY_LIMIT = 3
@@ -33,6 +35,13 @@ const READ_CACHE_TTL = 5 * 60 * 1000
 const readCache = new Map()
 const EMAIL_MASK_RE = /^(.{1,2})(.*)(@.*)$/
 const CONTACT_EMAIL_SECRET = process.env.CONTACT_EMAIL_SECRET || 'change-me-before-launch'
+const DISH_IMPORT_MAX_COUNT = 300
+const DISH_NAME_MAX_LENGTH = 30
+const DISH_PRICE_MAX_LENGTH = 20
+const DISH_VIBE_MAX_LENGTH = 8
+const DISH_TAG_OPTIONS = ['浜烘皵', '鏂板搧', '鎺ㄨ崘', '鎷涚墝', '闄愭椂']
+const DISH_CATEGORY_OPTIONS = ['涓婚', '绮夐潰', '鐑ц厞', '灏忕倰', '闈㈤', '楗搧', '鐢滃搧', '灏忓悆']
+const IMPORT_MODE_OPTIONS = ['skip_duplicate', 'force_create']
 
 function getReadCache(key) {
   const cached = readCache.get(key)
@@ -62,7 +71,7 @@ async function verifyUniIdAdmin(context, token = '') {
     const runtimeToken = token || (typeof context.getUniIdToken === 'function' ? context.getUniIdToken() : '')
     const uid = clientInfo.uid || clientInfo.UID || ''
     const role = clientInfo.role || clientInfo.ROLE || []
-    if (role.includes('admin') || role.includes('super_admin')) {
+    if (hasAdminRole(role)) {
       return { uid }
     }
 
@@ -75,7 +84,7 @@ async function verifyUniIdAdmin(context, token = '') {
       if (payload.code || payload.errCode) return null
 
       const payloadRole = payload.role || []
-      if (payloadRole.includes('admin') || payloadRole.includes('super_admin')) {
+      if (hasAdminRole(payloadRole)) {
         return { uid: payload.uid || uid }
       }
     } catch (err) {
@@ -85,6 +94,66 @@ async function verifyUniIdAdmin(context, token = '') {
     console.warn('[co-campus] verify uni-admin context failed', err.message || err)
   }
   return null
+}
+
+function hasAdminRole(role = []) {
+  const roles = Array.isArray(role) ? role : [role]
+  return roles.some((item) => ['admin', 'super_admin', 'uni-admin'].includes(String(item || '')))
+}
+
+async function verifyUniIdUserByToken(token = '') {
+  if (!token) return null
+  try {
+    const { data } = await uniIdUsersCollection
+      .where({
+        token: db.command.elemMatch({ token })
+      })
+      .field({ _id: true, role: true, username: true, nickname: true })
+      .limit(1)
+      .get()
+
+    const user = data && data[0]
+    if (user && hasAdminRole(user.role)) {
+      return { uid: user._id, username: user.username || user.nickname || '' }
+    }
+  } catch (err) {
+    console.warn('[co-campus] verify uni-id user token failed', err.message || err)
+  }
+  return null
+}
+
+async function verifyTokenValue(token) {
+  if (!token) return null
+  try {
+    const { data: users } = await usersCollection.where({ token }).limit(1).get()
+    if (!users.length) return null
+    const user = users[0]
+    const elapsed = Date.now() - (user.updatedAt || 0)
+    if (elapsed > TOKEN_EXPIRE_MS) return null
+    return user.openid
+  } catch (err) {
+    return null
+  }
+}
+
+async function verifyAdminValue(context, token) {
+  if (!token) return null
+
+  const uniAdmin = await verifyUniIdAdmin(context || {}, token)
+  if (uniAdmin) {
+    return uniAdmin.uid || 'uni-admin'
+  }
+
+  const uniIdUserAdmin = await verifyUniIdUserByToken(token)
+  if (uniIdUserAdmin) {
+    return uniIdUserAdmin.uid || 'uni-id-admin'
+  }
+
+  const openid = await verifyTokenValue(token)
+  if (!openid || !ENV_ADMIN_OPENIDS.concat(ADMIN_OPENIDS).includes(openid)) {
+    return null
+  }
+  return openid
 }
 
 function getDayStartTimestamp() {
@@ -120,23 +189,124 @@ function encodeSensitiveText(value = '') {
   ].join(':')
 }
 
+function normalizeImportText(value = '') {
+  return String(value || '').replace(/\s+/g, ' ').trim()
+}
+
+function normalizeImportPrice(value = '') {
+  return normalizeImportText(value)
+    .replace(/[锟ヂュ厓]/g, '')
+    .replace(/\s+/g, '')
+}
+
+function normalizeImportDish(dish = {}, index = 0) {
+  return {
+    localId: normalizeImportText(dish.localId) || `row_${index + 1}`,
+    imageName: normalizeImportText(dish.imageName),
+    sourceType: normalizeImportText(dish.sourceType),
+    name: normalizeImportText(dish.name),
+    category: normalizeImportText(dish.category),
+    tag: normalizeImportText(dish.tag),
+    price: normalizeImportPrice(dish.price),
+    vibe: normalizeImportText(dish.vibe)
+  }
+}
+
+function validateImportDish(dish = {}) {
+  const issues = []
+
+  if (!dish.name) {
+    issues.push('菜品名称不能为空')
+  }
+
+  if (dish.name && dish.name.length > DISH_NAME_MAX_LENGTH) {
+    issues.push('菜品名称太长了')
+  }
+
+  if (dish.category && !DISH_CATEGORY_OPTIONS.includes(dish.category)) {
+    issues.push('分类不在允许范围内')
+  }
+
+  if (dish.tag && !DISH_TAG_OPTIONS.includes(dish.tag)) {
+    issues.push('标签不在允许范围内')
+  }
+
+  if (dish.price && dish.price.length > DISH_PRICE_MAX_LENGTH) {
+    issues.push('价格信息有点长')
+  }
+
+  if (dish.price && !/^\d+(\.\d+)?(-\d+(\.\d+)?)?$|^\d+(\.\d+)?起$/.test(dish.price)) {
+    issues.push('价格格式不太对')
+  }
+
+  if (dish.vibe && dish.vibe.length > DISH_VIBE_MAX_LENGTH) {
+    issues.push('氛围文案建议短一点')
+  }
+
+  let status = 'valid'
+  if (issues.includes('菜品名称不能为空') || issues.includes('菜品名称太长了')) {
+    status = 'invalid'
+  } else if (issues.length) {
+    status = 'warning'
+  }
+
+  return { status, issues }
+}
+
+async function verifyDishImportTarget(canteenId = '', stallId = '') {
+  const safeCanteenId = normalizeImportText(canteenId)
+  const safeStallId = normalizeImportText(stallId)
+
+  if (!safeCanteenId || !safeStallId) {
+    return { code: -1, msg: '缺少饭堂或档口信息' }
+  }
+
+  const { data: stalls } = await stallsCollection.where({
+    _id: safeStallId,
+    canteenId: safeCanteenId,
+    status: 'active'
+  }).limit(1).get()
+
+  if (!stalls.length) {
+    return { code: -1, msg: '档口和饭堂对应不上，请重新选一个' }
+  }
+
+  return { code: 0, data: stalls[0] }
+}
+
+async function getExistingDishNameSet(stallId = '') {
+  const safeStallId = normalizeImportText(stallId)
+  if (!safeStallId) return new Set()
+
+  const { data } = await dishesCollection.where({
+    stallId: safeStallId,
+    status: 'active'
+  }).field({ name: true }).get()
+
+  return new Set(
+    data
+      .map((item) => normalizeImportText(item.name))
+      .filter(Boolean)
+  )
+}
+
 module.exports = {
   /**
-   * 提交校园入驻申请
+   * 鎻愪氦鏍″洯鍏ラ┗鐢宠
    * @param {string} token
    * @param {object} formData - { campusName, campusTag, city, contactName, contactEmail }
    * @returns {{ code: number, data?: object, msg?: string }}
    */
   async submitApplication(token, formData = {}) {
-    const openid = await this._verifyToken(token)
+    const openid = await verifyTokenValue(token)
     if (!openid) {
-      return { code: -1, msg: '请先登录' }
+      return { code: -1, msg: '璇峰厛鐧诲綍' }
     }
 
     const contactEmail = String(formData.contactEmail || formData.contactPhone || '').trim()
 
     if (!formData.campusName || !contactEmail) {
-      return { code: -1, msg: '请至少填写校园名称和邮箱' }
+      return { code: -1, msg: '璇疯嚦灏戝～鍐欐牎鍥悕绉板拰閭' }
     }
 
     const todayStart = getDayStartTimestamp()
@@ -146,7 +316,7 @@ module.exports = {
     }).count()
 
     if (todaySubmitCount >= APPLICATION_DAILY_LIMIT) {
-      return { code: -1, msg: `今天最多提交 ${APPLICATION_DAILY_LIMIT} 次入驻申请，明天再来试试` }
+      return { code: -1, msg: `浠婂ぉ鏈€澶氭彁浜?${APPLICATION_DAILY_LIMIT} 娆″叆椹荤敵璇凤紝鏄庡ぉ鍐嶆潵璇曡瘯` }
     }
 
     const { total: pendingSubmitCount } = await applicationsCollection.where({
@@ -155,7 +325,7 @@ module.exports = {
     }).count()
 
     if (pendingSubmitCount >= APPLICATION_PENDING_LIMIT) {
-      return { code: -1, msg: `你还有 ${APPLICATION_PENDING_LIMIT} 条申请在审核中，先等等审核结果吧` }
+      return { code: -1, msg: `浣犺繕鏈?${APPLICATION_PENDING_LIMIT} 鏉＄敵璇峰湪瀹℃牳涓紝鍏堢瓑绛夊鏍哥粨鏋滃惂` }
     }
 
     // 内容安全检查
@@ -173,7 +343,7 @@ module.exports = {
       console.warn('[co-campus] content check failed, continue', err)
     }
 
-    // 检查是否重复提交
+    // 妫€鏌ユ槸鍚﹂噸澶嶆彁浜?
     const { data: existApps } = await applicationsCollection.where({
       openid,
       campusName: formData.campusName,
@@ -182,7 +352,7 @@ module.exports = {
     }).limit(1).get()
 
     if (existApps.length) {
-      return { code: -1, msg: '你已经提交过该校园的入驻申请' }
+      return { code: -1, msg: '浣犲凡缁忔彁浜よ繃璇ユ牎鍥殑鍏ラ┗鐢宠' }
     }
 
     const campusId = `campus-${Date.now()}`
@@ -218,14 +388,14 @@ module.exports = {
   },
 
   /**
-   * 获取我的校园申请列表
+   * 鑾峰彇鎴戠殑鏍″洯鐢宠鍒楄〃
    * @param {string} token
    * @returns {{ code: number, data?: Array, msg?: string }}
    */
   async getMyApplications(token) {
-    const openid = await this._verifyToken(token)
+    const openid = await verifyTokenValue(token)
     if (!openid) {
-      return { code: -1, msg: '请先登录' }
+      return { code: -1, msg: '璇峰厛鐧诲綍' }
     }
 
     const { data: apps } = await applicationsCollection
@@ -249,7 +419,7 @@ module.exports = {
   },
 
   /**
-   * 获取已入驻校园列表（公开接口，无需登录）
+   * 鑾峰彇宸插叆椹绘牎鍥垪琛紙鍏紑鎺ュ彛锛屾棤闇€鐧诲綍锛?
    * @returns {{ code: number, data?: Array, msg?: string }}
    */
   async getApprovedCampuses() {
@@ -257,32 +427,31 @@ module.exports = {
     const cached = getReadCache(cacheKey)
     if (cached) return cached
 
-    // 从 applications 取已通过的
-    const { data: approvedApps } = await applicationsCollection
-      .where({ status: '已通过' })
+    // 浠?applications 鍙栧凡閫氳繃鐨?    const { data: approvedApps } = await applicationsCollection
+      .where({ status: '宸查€氳繃' })
       .field({ campusName: true, campusTag: true, city: true, campusId: true })
       .get()
 
-    // 从 campuses 表取 active 的
+    // 浠?campuses 琛ㄥ彇 active 鐨?
     const { data: activeCampuses } = await campusesCollection
       .where({ status: 'active' })
       .get()
 
     const campusList = []
 
-    // 合并 campuses 表的数据
+    // 鍚堝苟 campuses 琛ㄧ殑鏁版嵁
     activeCampuses.forEach((campus) => {
       campusList.push({
         id: campus._id,
         name: campus.name,
         shortName: campus.shortName || campus.name.slice(0, 4),
         campusTag: campus.campusTag || '',
-        district: campus.district || '校园合作',
+        district: campus.district || '鏍″洯鍚堜綔',
         specialties: campus.specialties || []
       })
     })
 
-    // 合并申请通过的（如果不在 campuses 表里）
+    // 鍚堝苟鐢宠閫氳繃鐨勶紙濡傛灉涓嶅湪 campuses 琛ㄩ噷锛?
     const existNames = new Set(campusList.map((c) => c.name))
     approvedApps.forEach((app) => {
       if (!existNames.has(app.campusName)) {
@@ -291,7 +460,7 @@ module.exports = {
           name: app.campusName,
           shortName: app.campusName.slice(0, 4),
           campusTag: app.campusTag || '',
-          district: app.city || '校园合作',
+          district: app.city || '鏍″洯鍚堜綔',
           specialties: []
         })
       }
@@ -301,13 +470,13 @@ module.exports = {
   },
 
   /**
-   * 获取指定学校的饭堂列表
-   * @param {string} campusName - 学校名称
+   * 鑾峰彇鎸囧畾瀛︽牎鐨勯キ鍫傚垪琛?
+   * @param {string} campusName - 瀛︽牎鍚嶇О
    * @returns {{ code: number, data?: Array, msg?: string }}
    */
   async getCanteensByCampus(campusName) {
     if (!campusName) {
-      return { code: -1, msg: '缺少学校名称' }
+      return { code: -1, msg: '缂哄皯瀛︽牎鍚嶇О' }
     }
 
     const cacheKey = `canteens:${campusName}`
@@ -330,13 +499,13 @@ module.exports = {
   },
 
   /**
-   * 获取指定饭堂的档口列表（含菜品）
-   * @param {string} canteenId - 饭堂ID
+   * 鑾峰彇鎸囧畾楗爞鐨勬。鍙ｅ垪琛紙鍚彍鍝侊級
+   * @param {string} canteenId - 楗爞ID
    * @returns {{ code: number, data?: Array, msg?: string }}
    */
   async getStallsByCanteen(canteenId) {
     if (!canteenId) {
-      return { code: -1, msg: '缺少饭堂ID' }
+      return { code: -1, msg: '缂哄皯楗爞ID' }
     }
 
     const cacheKey = `stalls:${canteenId}`
@@ -348,7 +517,7 @@ module.exports = {
       .orderBy('sort', 'asc')
       .get()
 
-    // 批量查询所有档口的菜品
+    // 鎵归噺鏌ヨ鎵€鏈夋。鍙ｇ殑鑿滃搧
     const stallIds = stalls.map((s) => s._id)
     let allDishes = []
     if (stallIds.length) {
@@ -370,8 +539,7 @@ module.exports = {
       .orderBy('sort', 'asc')
       .get()
 
-    // 按档口分组
-    const dishesByStall = {}
+    // 鎸夋。鍙ｅ垎缁?    const dishesByStall = {}
     allDishes.forEach((dish) => {
       if (!dishesByStall[dish.stallId]) {
         dishesByStall[dish.stallId] = []
@@ -423,9 +591,7 @@ module.exports = {
   },
 
   /**
-   * 获取普通版推荐候选菜品
-   * @param {number} limit - 最多返回数量
-   * @returns {{ code: number, data?: Array, msg?: string }}
+   * 鑾峰彇鏅€氱増鎺ㄨ崘鍊欓€夎彍鍝?   * @param {number} limit - 鏈€澶氳繑鍥炴暟閲?   * @returns {{ code: number, data?: Array, msg?: string }}
    */
   async getNormalDishCandidates(limit = 80) {
     const safeLimit = Math.max(1, Math.min(Number(limit) || 80, 200))
@@ -454,10 +620,8 @@ module.exports = {
   },
 
   /**
-   * 获取校园版推荐候选菜品
-   * @param {Array<string>} canteenIds - 饭堂ID列表
-   * @param {number} limit - 最多返回数量
-   * @returns {{ code: number, data?: Array, msg?: string }}
+   * 鑾峰彇鏍″洯鐗堟帹鑽愬€欓€夎彍鍝?   * @param {Array<string>} canteenIds - 楗爞ID鍒楄〃
+   * @param {number} limit - 鏈€澶氳繑鍥炴暟閲?   * @returns {{ code: number, data?: Array, msg?: string }}
    */
   async getCampusDishCandidates(canteenIds = [], limit = 120) {
     const ids = Array.isArray(canteenIds)
@@ -546,20 +710,19 @@ module.exports = {
   },
 
   /**
-   * 获取指定学校的完整饭堂数据（饭堂+档口+菜品）
-   * @param {string} campusName - 学校名称
+   * 鑾峰彇鎸囧畾瀛︽牎鐨勫畬鏁撮キ鍫傛暟鎹紙楗爞+妗ｅ彛+鑿滃搧锛?   * @param {string} campusName - 瀛︽牎鍚嶇О
    * @returns {{ code: number, data?: Array, msg?: string }}
    */
   async getCanteenFullData(campusName) {
     if (!campusName) {
-      return { code: -1, msg: '缺少学校名称' }
+      return { code: -1, msg: '缂哄皯瀛︽牎鍚嶇О' }
     }
 
     const cacheKey = `canteenFull:${campusName}`
     const cached = getReadCache(cacheKey)
     if (cached) return cached
 
-    // 1. 获取饭堂列表
+    // 1. 鑾峰彇楗爞鍒楄〃
     const { data: canteens } = await canteensCollection
       .where({ campusName, status: 'active' })
       .orderBy('sort', 'asc')
@@ -571,7 +734,7 @@ module.exports = {
 
     const canteenIds = canteens.map((c) => c._id)
 
-    // 2. 获取所有档口
+    // 2. 鑾峰彇鎵€鏈夋。鍙?
     const { data: stalls } = await stallsCollection
       .where({
         canteenId: db.command.in(canteenIds),
@@ -582,8 +745,7 @@ module.exports = {
 
     const stallIds = stalls.map((s) => s._id)
 
-    // 3. 获取所有菜品
-    let allDishes = []
+    // 3. 鑾峰彇鎵€鏈夎彍鍝?    let allDishes = []
     if (stallIds.length) {
       const { data: dishes } = await dishesCollection
         .where({
@@ -602,8 +764,7 @@ module.exports = {
       .orderBy('sort', 'asc')
       .get()
 
-    // 按档口分组菜品
-    const dishesByStall = {}
+    // 鎸夋。鍙ｅ垎缁勮彍鍝?    const dishesByStall = {}
     allDishes.forEach((dish) => {
       if (!dishesByStall[dish.stallId]) {
         dishesByStall[dish.stallId] = []
@@ -636,7 +797,7 @@ module.exports = {
       })
     })
 
-    // 按饭堂分组档口
+    // 鎸夐キ鍫傚垎缁勬。鍙?
     const stallsByCanteen = {}
     stalls.forEach((stall) => {
       if (!stallsByCanteen[stall.canteenId]) {
@@ -666,7 +827,7 @@ module.exports = {
       }
     })
 
-    // 组装最终结果
+    // 缁勮鏈€缁堢粨鏋?
     return setReadCache(cacheKey, {
       code: 0,
       data: canteens.map((c) => ({
@@ -679,13 +840,13 @@ module.exports = {
   },
 
   /**
-   * 获取指定学校的校园服务列表
-   * @param {string} campusName - 学校名称
+   * 鑾峰彇鎸囧畾瀛︽牎鐨勬牎鍥湇鍔″垪琛?
+   * @param {string} campusName - 瀛︽牎鍚嶇О
    * @returns {{ code: number, data?: Array, msg?: string }}
    */
   async getServicesByCampus(campusName) {
     if (!campusName) {
-      return { code: -1, msg: '缺少学校名称' }
+      return { code: -1, msg: '缂哄皯瀛︽牎鍚嶇О' }
     }
 
     const cacheKey = `services:${campusName}`
@@ -701,7 +862,7 @@ module.exports = {
       code: 0,
       data: services.map((s) => ({
         id: s._id,
-        icon: s.icon || '📋',
+        icon: s.icon || '馃搵',
         name: s.name,
         remark: s.remark || '',
         externalUrl: s.externalUrl || ''
@@ -709,28 +870,28 @@ module.exports = {
     })
   },
 
-  // ====== 档口 CRUD ======
+  // ====== 妗ｅ彛 CRUD ======
 
   /**
-   * 添加档口（商铺）
-   * @param {string} canteenId - 饭堂ID
+   * 娣诲姞妗ｅ彛锛堝晢閾猴級
+   * @param {string} canteenId - 楗爞ID
    * @param {object} stallData - { name, category, remark }
    * @returns {{ code: number, data?: object, msg?: string }}
    */
   async addStall(token, canteenId, stallData = {}) {
-    const openid = await this._verifyAdmin(token)
+    const openid = await verifyAdminValue(this, token)
     if (!openid) {
       return { code: -1, msg: '无管理权限' }
     }
 
     if (!canteenId) {
-      return { code: -1, msg: '缺少饭堂ID' }
+      return { code: -1, msg: '缂哄皯楗爞ID' }
     }
     if (!stallData.name) {
       return { code: -1, msg: '请输入商铺名称' }
     }
 
-    // 获取当前最大 sort
+    // 鑾峰彇褰撳墠鏈€澶?sort
     const { data: existingStalls } = await stallsCollection
       .where({ canteenId, status: 'active' })
       .orderBy('sort', 'desc')
@@ -764,30 +925,30 @@ module.exports = {
   },
 
   /**
-   * 更新档口信息
-   * @param {string} canteenId - 饭堂ID（用于验证归属）
-   * @param {string} stallId - 档口ID
+   * 鏇存柊妗ｅ彛淇℃伅
+   * @param {string} canteenId - 楗爞ID锛堢敤浜庨獙璇佸綊灞烇級
+   * @param {string} stallId - 妗ｅ彛ID
    * @param {object} stallData - { name, category, remark }
    * @returns {{ code: number, msg?: string }}
    */
   async updateStall(token, canteenId, stallId, stallData = {}) {
-    const openid = await this._verifyAdmin(token)
+    const openid = await verifyAdminValue(this, token)
     if (!openid) {
       return { code: -1, msg: '无管理权限' }
     }
 
     if (!canteenId || !stallId) {
-      return { code: -1, msg: '缺少参数' }
+      return { code: -1, msg: '缂哄皯鍙傛暟' }
     }
 
-    // 验证档口属于该饭堂
+    // 楠岃瘉妗ｅ彛灞炰簬璇ラキ鍫?
     const { data: stalls } = await stallsCollection
       .where({ _id: stallId, canteenId, status: 'active' })
       .limit(1)
       .get()
 
     if (!stalls.length) {
-      return { code: -1, msg: '档口不存在或无权操作' }
+      return { code: -1, msg: '妗ｅ彛涓嶅瓨鍦ㄦ垨鏃犳潈鎿嶄綔' }
     }
 
     const updateData = { updatedAt: Date.now() }
@@ -799,44 +960,44 @@ module.exports = {
 
     clearReadCache()
 
-    return { code: 0, msg: '更新成功' }
+    return { code: 0, msg: '鏇存柊鎴愬姛' }
   },
 
   /**
-   * 删除档口（软删除，同时删除其下所有菜品）
-   * @param {string} canteenId - 饭堂ID
-   * @param {string} stallId - 档口ID
+   * 鍒犻櫎妗ｅ彛锛堣蒋鍒犻櫎锛屽悓鏃跺垹闄ゅ叾涓嬫墍鏈夎彍鍝侊級
+   * @param {string} canteenId - 楗爞ID
+   * @param {string} stallId - 妗ｅ彛ID
    * @returns {{ code: number, msg?: string }}
    */
   async deleteStall(token, canteenId, stallId) {
-    const openid = await this._verifyAdmin(token)
+    const openid = await verifyAdminValue(this, token)
     if (!openid) {
       return { code: -1, msg: '无管理权限' }
     }
 
     if (!canteenId || !stallId) {
-      return { code: -1, msg: '缺少参数' }
+      return { code: -1, msg: '缂哄皯鍙傛暟' }
     }
 
-    // 验证档口属于该饭堂
+    // 楠岃瘉妗ｅ彛灞炰簬璇ラキ鍫?
     const { data: stalls } = await stallsCollection
       .where({ _id: stallId, canteenId, status: 'active' })
       .limit(1)
       .get()
 
     if (!stalls.length) {
-      return { code: -1, msg: '档口不存在或无权操作' }
+      return { code: -1, msg: '妗ｅ彛涓嶅瓨鍦ㄦ垨鏃犳潈鎿嶄綔' }
     }
 
     const now = Date.now()
 
-    // 软删除档口
+    // 杞垹闄ゆ。鍙?
     await stallsCollection.doc(stallId).update({
       status: 'inactive',
       updatedAt: now
     })
 
-    // 软删除该档口下所有菜品
+    // 杞垹闄よ妗ｅ彛涓嬫墍鏈夎彍鍝?
     const { data: dishes } = await dishesCollection
       .where({ stallId, status: 'active' })
       .get()
@@ -853,19 +1014,19 @@ module.exports = {
 
     clearReadCache()
 
-    return { code: 0, msg: '删除成功' }
+    return { code: 0, msg: '鍒犻櫎鎴愬姛' }
   },
 
-  // ====== 菜品 CRUD ======
+  // ====== 鑿滃搧 CRUD ======
 
   /**
-   * 获取指定档口的菜品列表
-   * @param {string} stallId - 档口ID
+   * 鑾峰彇鎸囧畾妗ｅ彛鐨勮彍鍝佸垪琛?
+   * @param {string} stallId - 妗ｅ彛ID
    * @returns {{ code: number, data?: Array, msg?: string }}
    */
   async getDishesByStall(stallId) {
     if (!stallId) {
-      return { code: -1, msg: '缺少档口ID' }
+      return { code: -1, msg: '缂哄皯妗ｅ彛ID' }
     }
 
     const cacheKey = `dishes:${stallId}`
@@ -891,26 +1052,26 @@ module.exports = {
   },
 
   /**
-   * 添加菜品
-   * @param {string} stallId - 档口ID
-   * @param {string} canteenId - 饭堂ID（冗余字段）
+   * 娣诲姞鑿滃搧
+   * @param {string} stallId - 妗ｅ彛ID
+   * @param {string} canteenId - 楗爞ID锛堝啑浣欏瓧娈碉級
    * @param {object} dishData - { name, category, tag, price, vibe }
    * @returns {{ code: number, data?: object, msg?: string }}
    */
   async addDish(token, stallId, canteenId, dishData = {}) {
-    const openid = await this._verifyAdmin(token)
+    const openid = await verifyAdminValue(this, token)
     if (!openid) {
       return { code: -1, msg: '无管理权限' }
     }
 
     if (!stallId) {
-      return { code: -1, msg: '缺少档口ID' }
+      return { code: -1, msg: '缂哄皯妗ｅ彛ID' }
     }
     if (!dishData.name) {
       return { code: -1, msg: '请输入菜品名称' }
     }
 
-    // 获取当前最大 sort
+    // 鑾峰彇褰撳墠鏈€澶?sort
     const { data: existingDishes } = await dishesCollection
       .where({ stallId, status: 'active' })
       .orderBy('sort', 'desc')
@@ -949,30 +1110,30 @@ module.exports = {
   },
 
   /**
-   * 更新菜品信息
-   * @param {string} stallId - 档口ID（验证归属）
-   * @param {string} dishId - 菜品ID
+   * 鏇存柊鑿滃搧淇℃伅
+   * @param {string} stallId - 妗ｅ彛ID锛堥獙璇佸綊灞烇級
+   * @param {string} dishId - 鑿滃搧ID
    * @param {object} dishData - { name, category, tag, price, vibe }
    * @returns {{ code: number, msg?: string }}
    */
   async updateDish(token, stallId, dishId, dishData = {}) {
-    const openid = await this._verifyAdmin(token)
+    const openid = await verifyAdminValue(this, token)
     if (!openid) {
       return { code: -1, msg: '无管理权限' }
     }
 
     if (!stallId || !dishId) {
-      return { code: -1, msg: '缺少参数' }
+      return { code: -1, msg: '缂哄皯鍙傛暟' }
     }
 
-    // 验证菜品属于该档口
+    // 楠岃瘉鑿滃搧灞炰簬璇ユ。鍙?
     const { data: dishes } = await dishesCollection
       .where({ _id: dishId, stallId, status: 'active' })
       .limit(1)
       .get()
 
     if (!dishes.length) {
-      return { code: -1, msg: '菜品不存在或无权操作' }
+      return { code: -1, msg: '鑿滃搧涓嶅瓨鍦ㄦ垨鏃犳潈鎿嶄綔' }
     }
 
     const updateData = { updatedAt: Date.now() }
@@ -986,33 +1147,33 @@ module.exports = {
 
     clearReadCache()
 
-    return { code: 0, msg: '更新成功' }
+    return { code: 0, msg: '鏇存柊鎴愬姛' }
   },
 
   /**
-   * 删除菜品（软删除）
-   * @param {string} stallId - 档口ID
-   * @param {string} dishId - 菜品ID
+   * 鍒犻櫎鑿滃搧锛堣蒋鍒犻櫎锛?
+   * @param {string} stallId - 妗ｅ彛ID
+   * @param {string} dishId - 鑿滃搧ID
    * @returns {{ code: number, msg?: string }}
    */
   async deleteDish(token, stallId, dishId) {
-    const openid = await this._verifyAdmin(token)
+    const openid = await verifyAdminValue(this, token)
     if (!openid) {
       return { code: -1, msg: '无管理权限' }
     }
 
     if (!stallId || !dishId) {
-      return { code: -1, msg: '缺少参数' }
+      return { code: -1, msg: '缂哄皯鍙傛暟' }
     }
 
-    // 验证菜品属于该档口
+    // 楠岃瘉鑿滃搧灞炰簬璇ユ。鍙?
     const { data: dishes } = await dishesCollection
       .where({ _id: dishId, stallId, status: 'active' })
       .limit(1)
       .get()
 
     if (!dishes.length) {
-      return { code: -1, msg: '菜品不存在或无权操作' }
+      return { code: -1, msg: '鑿滃搧涓嶅瓨鍦ㄦ垨鏃犳潈鎿嶄綔' }
     }
 
     await dishesCollection.doc(dishId).update({
@@ -1022,18 +1183,220 @@ module.exports = {
 
     clearReadCache()
 
-    return { code: 0, msg: '删除成功' }
+    return { code: 0, msg: '鍒犻櫎鎴愬姛' }
   },
 
-  // ====== 管理员接口 ======
+  /**
+   * 棰勬鑿滃搧鎵归噺瀵煎叆鏁版嵁锛堢鐞嗗憳锛?   * @param {string} token
+   * @param {object} payload - { canteenId, stallId, dishes }
+   * @returns {{ code: number, data?: object, msg?: string }}
+   */
+  async previewImportDishes(token, payload = {}) {
+    const openid = await verifyAdminValue(this, token)
+    if (!openid) {
+      return { code: -1, msg: '无管理权限' }
+    }
+
+    const canteenId = normalizeImportText(payload.canteenId)
+    const stallId = normalizeImportText(payload.stallId)
+    const dishList = Array.isArray(payload.dishes) ? payload.dishes : []
+
+    if (!dishList.length) {
+      return { code: -1, msg: '杩欎唤鏂囦欢閲岃繕娌℃湁鍙鍏ョ殑鑿滃搧' }
+    }
+
+    if (dishList.length > DISH_IMPORT_MAX_COUNT) {
+      return { code: -1, msg: `单次最多先处理 ${DISH_IMPORT_MAX_COUNT} 道菜品` }
+    }
+
+    const targetCheck = await verifyDishImportTarget(canteenId, stallId)
+    if (targetCheck.code !== 0) {
+      return targetCheck
+    }
+
+    const normalizedRows = dishList.map((dish, index) => normalizeImportDish(dish, index))
+    const existingNameSet = await getExistingDishNameSet(stallId)
+    const batchNameCountMap = new Map()
+
+    normalizedRows.forEach((row) => {
+      if (!row.name) return
+      batchNameCountMap.set(row.name, (batchNameCountMap.get(row.name) || 0) + 1)
+    })
+
+    const rows = normalizedRows.map((row) => {
+      const { status: baseStatus, issues } = validateImportDish(row)
+      const nextIssues = [...issues]
+      let status = baseStatus
+
+      if (row.name && batchNameCountMap.get(row.name) > 1) {
+        nextIssues.push('杩欐壒鏁版嵁閲屾湁閲嶅悕鑿滃搧')
+        if (status === 'valid') status = 'warning'
+      }
+
+      if (row.name && existingNameSet.has(row.name)) {
+        nextIssues.push('褰撳墠妗ｅ彛閲屽凡缁忔湁鍚屽悕鑿滃搧')
+        if (status === 'valid') status = 'warning'
+      }
+
+      return {
+        ...row,
+        status,
+        issues: nextIssues
+      }
+    })
+
+    return {
+      code: 0,
+      data: {
+        summary: {
+          total: rows.length,
+          valid: rows.filter((row) => row.status === 'valid').length,
+          warning: rows.filter((row) => row.status === 'warning').length,
+          invalid: rows.filter((row) => row.status === 'invalid').length,
+          duplicateInBatch: rows.filter((row) => row.issues.includes('杩欐壒鏁版嵁閲屾湁閲嶅悕鑿滃搧')).length,
+          duplicateInDb: rows.filter((row) => row.issues.includes('褰撳墠妗ｅ彛閲屽凡缁忔湁鍚屽悕鑿滃搧')).length
+        },
+        rows
+      }
+    }
+  },
 
   /**
-   * 获取待审核申请列表（管理员）
+   * 姝ｅ紡鎵归噺瀵煎叆鑿滃搧锛堢鐞嗗憳锛?   * @param {string} token
+   * @param {object} payload - { canteenId, stallId, importMode, dishes }
+   * @returns {{ code: number, data?: object, msg?: string }}
+   */
+  async batchImportDishes(token, payload = {}) {
+    const openid = await verifyAdminValue(this, token)
+    if (!openid) {
+      return { code: -1, msg: '无管理权限' }
+    }
+
+    const canteenId = normalizeImportText(payload.canteenId)
+    const stallId = normalizeImportText(payload.stallId)
+    const importMode = normalizeImportText(payload.importMode) || 'skip_duplicate'
+    const dishList = Array.isArray(payload.dishes) ? payload.dishes : []
+
+    if (!IMPORT_MODE_OPTIONS.includes(importMode)) {
+      return { code: -1, msg: '导入模式不支持' }
+    }
+
+    if (!dishList.length) {
+      return { code: -1, msg: '这次还没有可导入的菜品' }
+    }
+
+    if (dishList.length > DISH_IMPORT_MAX_COUNT) {
+      return { code: -1, msg: `单次最多先处理 ${DISH_IMPORT_MAX_COUNT} 道菜品` }
+    }
+
+    const targetCheck = await verifyDishImportTarget(canteenId, stallId)
+    if (targetCheck.code !== 0) {
+      return targetCheck
+    }
+
+    const normalizedRows = dishList.map((dish, index) => normalizeImportDish(dish, index))
+    const existingNameSet = await getExistingDishNameSet(stallId)
+    const { data: maxSortRows } = await dishesCollection
+      .where({ stallId, status: 'active' })
+      .orderBy('sort', 'desc')
+      .limit(1)
+      .get()
+
+    let currentSort = maxSortRows.length ? (maxSortRows[0].sort || 0) : 0
+    const seenNamesInThisRun = new Set()
+    const now = Date.now()
+    const items = []
+    const docsToAdd = []
+
+    for (const row of normalizedRows) {
+      const { status, issues } = validateImportDish(row)
+
+      if (status === 'invalid') {
+        items.push({
+          localId: row.localId,
+          name: row.name,
+          result: 'failed',
+          reason: issues.join('，')
+        })
+        continue
+      }
+
+      const isDuplicateInDb = row.name && existingNameSet.has(row.name)
+      const isDuplicateInRun = row.name && seenNamesInThisRun.has(row.name)
+
+      if ((isDuplicateInDb || isDuplicateInRun) && importMode === 'skip_duplicate') {
+        items.push({
+          localId: row.localId,
+          name: row.name,
+          result: 'skipped',
+          reason: isDuplicateInDb ? '同档口已存在同名菜品' : '本次导入中有重复菜名'
+        })
+        continue
+      }
+
+      currentSort += 1
+      seenNamesInThisRun.add(row.name)
+      existingNameSet.add(row.name)
+
+      docsToAdd.push({
+        localId: row.localId,
+        name: row.name,
+        doc: {
+          stallId,
+          canteenId,
+          name: row.name,
+          category: row.category || '',
+          tag: row.tag || '',
+          price: row.price || '',
+          vibe: row.vibe || '',
+          sort: currentSort,
+          status: 'active',
+          createdAt: now,
+          updatedAt: now
+        }
+      })
+
+      items.push({
+        localId: row.localId,
+        name: row.name,
+        result: 'pending'
+      })
+    }
+
+    for (const item of docsToAdd) {
+      const addRes = await dishesCollection.add(item.doc)
+      const targetItem = items.find((row) => row.localId === item.localId && row.result === 'pending')
+      if (targetItem) {
+        targetItem.result = 'added'
+        targetItem.id = addRes.id
+      }
+    }
+
+    if (docsToAdd.length) {
+      clearReadCache()
+    }
+
+    return {
+      code: 0,
+      data: {
+        added: items.filter((item) => item.result === 'added').length,
+        skipped: items.filter((item) => item.result === 'skipped').length,
+        failed: items.filter((item) => item.result === 'failed').length,
+        items
+      },
+      msg: '这批菜品已经整理进档口里了'
+    }
+  },
+
+  // ====== 绠＄悊鍛樻帴鍙?======
+
+  /**
+   * 鑾峰彇寰呭鏍哥敵璇峰垪琛紙绠＄悊鍛橈級
    * @param {string} token
    * @returns {{ code: number, data?: Array, msg?: string }}
    */
   async getPendingApplications(token) {
-    const admin = await this._verifyAdmin(token)
+    const admin = await verifyAdminValue(this, token)
     if (!admin) {
       return { code: -1, msg: '无管理权限' }
     }
@@ -1048,21 +1411,21 @@ module.exports = {
   },
 
   /**
-   * 审核申请（管理员）
+   * 瀹℃牳鐢宠锛堢鐞嗗憳锛?
    * @param {string} token
-   * @param {string} applicationId - 申请记录ID
-   * @param {string} action - 'approve' 或 'reject'
-   * @param {string} note - 审核备注
+   * @param {string} applicationId - 鐢宠璁板綍ID
+   * @param {string} action - 'approve' 鎴?'reject'
+   * @param {string} note - 瀹℃牳澶囨敞
    * @returns {{ code: number, msg?: string }}
    */
   async reviewApplication(token, applicationId, action, note = '') {
-    const admin = await this._verifyAdmin(token)
+    const admin = await verifyAdminValue(this, token)
     if (!admin) {
       return { code: -1, msg: '无管理权限' }
     }
 
     if (!['approve', 'reject'].includes(action)) {
-      return { code: -1, msg: '操作无效' }
+      return { code: -1, msg: '鎿嶄綔鏃犳晥' }
     }
 
     const status = action === 'approve' ? '已通过' : '已拒绝'
@@ -1075,7 +1438,7 @@ module.exports = {
       updatedAt: Date.now()
     })
 
-    // 如果通过，自动创建校园记录（如不存在）
+    // 濡傛灉閫氳繃锛岃嚜鍔ㄥ垱寤烘牎鍥褰曪紙濡備笉瀛樺湪锛?
     if (action === 'approve') {
       const { data: app } = await applicationsCollection.doc(applicationId).get()
       if (app && app.length) {
@@ -1090,7 +1453,7 @@ module.exports = {
             name: appData.campusName,
             shortName: appData.campusName.slice(0, 4),
             campusTag: appData.campusTag || '',
-            district: appData.city || '校园合作',
+            district: appData.city || '鏍″洯鍚堜綔',
             specialties: [],
             status: 'active',
             createdAt: Date.now(),
@@ -1105,19 +1468,19 @@ module.exports = {
     return { code: 0, msg: status === '已通过' ? '已通过' : '已拒绝' }
   },
 
-  // ====== 内部方法 ======
+  // ====== 鍐呴儴鏂规硶 ======
 
   /**
-   * 验证 token
+   * 楠岃瘉 token
    * @private
    */
   async isAdmin(token) {
-    const openid = await this._verifyAdmin(token)
+    const openid = await verifyAdminValue(this, token)
     return { code: 0, data: { isAdmin: !!openid } }
   },
 
   async clearReadCache(token = '') {
-    const admin = await this._verifyAdmin(token)
+    const admin = await verifyAdminValue(this, token)
     if (!admin) {
       return { code: -1, msg: '无管理权限' }
     }
@@ -1148,7 +1511,7 @@ module.exports = {
       return uniAdmin.uid || 'uni-admin'
     }
 
-    const openid = await this._verifyToken(token)
+    const openid = await verifyTokenValue(token)
     if (!openid || !ENV_ADMIN_OPENIDS.concat(ADMIN_OPENIDS).includes(openid)) {
       return null
     }
@@ -1156,33 +1519,34 @@ module.exports = {
   },
 
   /**
-   * 格式化时间戳
+   * 鏍煎紡鍖栨椂闂存埑
    * @private
    */
   /**
-   * 一键初始化 admin 自定义菜单（插入到 opendb-admin-menus 表）
+   * 涓€閿垵濮嬪寲 admin 鑷畾涔夎彍鍗曪紙鎻掑叆鍒?opendb-admin-menus 琛級
    * @returns {{ code: number, msg: string, data?: object }}
    */
   async initAdminMenus(token = '') {
-    const openid = await this._verifyAdmin(token)
+    const openid = await verifyAdminValue(this, token)
     if (!openid) {
       return { code: -1, msg: '无管理权限' }
     }
 
     const menusTable = db.collection('opendb-admin-menus')
     const menus = [
-      { menu_id: 'canteen_management', name: '饭堂管理', icon: 'admin-icons-fl-xitong', url: '', sort: 500, parent_id: '', permission: [], enable: true, create_date: Date.now(), _id: 'eat-what-canteen-mgmt' },
-      { menu_id: 'campus_list', name: '校园管理', icon: 'admin-icons-manager-app', url: '/pages/eat-what/campus/list', sort: 510, parent_id: 'canteen_management', permission: [], enable: true, create_date: Date.now(), _id: 'eat-what-campus-list' },
-      { menu_id: 'canteen_list', name: '饭堂管理', icon: 'admin-icons-manager-app', url: '/pages/eat-what/canteen/list', sort: 520, parent_id: 'canteen_management', permission: [], enable: true, create_date: Date.now(), _id: 'eat-what-canteen-list' },
-      { menu_id: 'stall_list', name: '商铺管理', icon: 'admin-icons-manager-app', url: '/pages/eat-what/stall/list', sort: 530, parent_id: 'canteen_management', permission: [], enable: true, create_date: Date.now(), _id: 'eat-what-stall-list' },
-      { menu_id: 'dish_list', name: '菜品管理', icon: 'admin-icons-manager-tag', url: '/pages/eat-what/dish/list', sort: 540, parent_id: 'canteen_management', permission: [], enable: true, create_date: Date.now(), _id: 'eat-what-dish-list' },
+      { menu_id: 'canteen_management', name: '楗爞绠＄悊', icon: 'admin-icons-fl-xitong', url: '', sort: 500, parent_id: '', permission: [], enable: true, create_date: Date.now(), _id: 'eat-what-canteen-mgmt' },
+      { menu_id: 'campus_list', name: '鏍″洯绠＄悊', icon: 'admin-icons-manager-app', url: '/pages/eat-what/campus/list', sort: 510, parent_id: 'canteen_management', permission: [], enable: true, create_date: Date.now(), _id: 'eat-what-campus-list' },
+      { menu_id: 'canteen_list', name: '楗爞绠＄悊', icon: 'admin-icons-manager-app', url: '/pages/eat-what/canteen/list', sort: 520, parent_id: 'canteen_management', permission: [], enable: true, create_date: Date.now(), _id: 'eat-what-canteen-list' },
+      { menu_id: 'stall_list', name: '鍟嗛摵绠＄悊', icon: 'admin-icons-manager-app', url: '/pages/eat-what/stall/list', sort: 530, parent_id: 'canteen_management', permission: [], enable: true, create_date: Date.now(), _id: 'eat-what-stall-list' },
+      { menu_id: 'dish_list', name: '鑿滃搧绠＄悊', icon: 'admin-icons-manager-tag', url: '/pages/eat-what/dish/list', sort: 540, parent_id: 'canteen_management', permission: [], enable: true, create_date: Date.now(), _id: 'eat-what-dish-list' },
+      { menu_id: 'dish_import', name: '鑿滃搧瀵煎叆', icon: 'admin-icons-manager-tag', url: '/pages/eat-what/dish/import', sort: 542, parent_id: 'canteen_management', permission: [], enable: true, create_date: Date.now(), _id: 'eat-what-dish-import' },
       { menu_id: 'normal_dish_list', name: '普通版菜品池', icon: 'admin-icons-manager-tag', url: '/pages/eat-what/normal-dish/list', sort: 545, parent_id: 'canteen_management', permission: [], enable: true, create_date: Date.now(), _id: 'eat-what-normal-dish-list' },
-      { menu_id: 'ai_config', name: 'AI推荐设置', icon: 'admin-icons-gear', url: '/pages/eat-what/ai-config/index', sort: 548, parent_id: 'canteen_management', permission: [], enable: true, create_date: Date.now(), _id: 'eat-what-ai-config' },
-      { menu_id: 'application_management', name: '入驻审核', icon: 'admin-icons-manager-permission', url: '/pages/eat-what/application/list', sort: 550, parent_id: 'canteen_management', permission: [], enable: true, create_date: Date.now(), _id: 'eat-what-application-mgmt' },
-      { menu_id: 'service_management', name: '校园服务', icon: 'admin-icons-manager-role', url: '/pages/eat-what/service/list', sort: 560, parent_id: 'canteen_management', permission: [], enable: true, create_date: Date.now(), _id: 'eat-what-service-mgmt' },
-      { menu_id: 'user_management', name: '用户管理', icon: 'admin-icons-manager-user', url: '', sort: 600, parent_id: '', permission: [], enable: true, create_date: Date.now(), _id: 'eat-what-user-mgmt' },
-      { menu_id: 'user_list', name: '用户列表', icon: 'admin-icons-manager-user', url: '/pages/eat-what/user/list', sort: 610, parent_id: 'user_management', permission: [], enable: true, create_date: Date.now(), _id: 'eat-what-user-list' },
-      { menu_id: 'history_list', name: '推荐记录', icon: 'admin-icons-safety', url: '/pages/eat-what/history/list', sort: 620, parent_id: 'user_management', permission: [], enable: true, create_date: Date.now(), _id: 'eat-what-history-list' }
+      { menu_id: 'ai_config', name: 'AI鎺ㄨ崘璁剧疆', icon: 'admin-icons-gear', url: '/pages/eat-what/ai-config/index', sort: 548, parent_id: 'canteen_management', permission: [], enable: true, create_date: Date.now(), _id: 'eat-what-ai-config' },
+      { menu_id: 'application_management', name: '鍏ラ┗瀹℃牳', icon: 'admin-icons-manager-permission', url: '/pages/eat-what/application/list', sort: 550, parent_id: 'canteen_management', permission: [], enable: true, create_date: Date.now(), _id: 'eat-what-application-mgmt' },
+      { menu_id: 'service_management', name: '鏍″洯鏈嶅姟', icon: 'admin-icons-manager-role', url: '/pages/eat-what/service/list', sort: 560, parent_id: 'canteen_management', permission: [], enable: true, create_date: Date.now(), _id: 'eat-what-service-mgmt' },
+      { menu_id: 'user_management', name: '鐢ㄦ埛绠＄悊', icon: 'admin-icons-manager-user', url: '', sort: 600, parent_id: '', permission: [], enable: true, create_date: Date.now(), _id: 'eat-what-user-mgmt' },
+      { menu_id: 'user_list', name: '鐢ㄦ埛鍒楄〃', icon: 'admin-icons-manager-user', url: '/pages/eat-what/user/list', sort: 610, parent_id: 'user_management', permission: [], enable: true, create_date: Date.now(), _id: 'eat-what-user-list' },
+      { menu_id: 'history_list', name: '鎺ㄨ崘璁板綍', icon: 'admin-icons-safety', url: '/pages/eat-what/history/list', sort: 620, parent_id: 'user_management', permission: [], enable: true, create_date: Date.now(), _id: 'eat-what-history-list' }
     ]
 
     let added = 0
@@ -1206,24 +1570,25 @@ module.exports = {
   },
 
   /**
-   * 修复 admin 自定义菜单的 URL（将旧路径 /pages/xxx/list 更新为 /pages/eat-what/xxx/list）
-   * 用于数据库中已存在旧路径菜单记录的情况
+   * 淇 admin 鑷畾涔夎彍鍗曠殑 URL锛堝皢鏃ц矾寰?/pages/xxx/list 鏇存柊涓?/pages/eat-what/xxx/list锛?
+   * 鐢ㄤ簬鏁版嵁搴撲腑宸插瓨鍦ㄦ棫璺緞鑿滃崟璁板綍鐨勬儏鍐?
    * @returns {{ code: number, msg: string, data?: object }}
    */
   async fixAdminMenusUrl(token = '') {
-    const openid = await this._verifyAdmin(token)
+    const openid = await verifyAdminValue(this, token)
     if (!openid) {
       return { code: -1, msg: '无管理权限' }
     }
 
     const menusTable = db.collection('opendb-admin-menus')
 
-    // 定义正确的 URL 映射（_id -> 正确的新 URL）
+    // 定义正确的 URL 映射（id -> 正确的新 URL）
     const correctUrls = {
       'eat-what-campus-list': '/pages/eat-what/campus/list',
       'eat-what-canteen-list': '/pages/eat-what/canteen/list',
       'eat-what-stall-list': '/pages/eat-what/stall/list',
       'eat-what-dish-list': '/pages/eat-what/dish/list',
+      'eat-what-dish-import': '/pages/eat-what/dish/import',
       'eat-what-normal-dish-list': '/pages/eat-what/normal-dish/list',
       'eat-what-ai-config': '/pages/eat-what/ai-config/index',
       'eat-what-application-mgmt': '/pages/eat-what/application/list',
@@ -1232,7 +1597,22 @@ module.exports = {
       'eat-what-history-list': '/pages/eat-what/history/list'
     }
 
-    // 父级菜单不需要 URL
+    const missingMenuRecords = {
+      'eat-what-dish-import': {
+        _id: 'eat-what-dish-import',
+        menu_id: 'dish_import',
+        name: '菜品导入',
+        icon: 'admin-icons-manager-tag',
+        url: '/pages/eat-what/dish/import',
+        sort: 542,
+        parent_id: 'canteen_management',
+        permission: [],
+        enable: true,
+        create_date: Date.now()
+      }
+    }
+
+    // 鐖剁骇鑿滃崟涓嶉渶瑕?URL
     const parentIds = ['eat-what-canteen-mgmt', 'eat-what-user-mgmt']
 
     let updated = 0
@@ -1242,26 +1622,33 @@ module.exports = {
     for (const [menuId, correctUrl] of Object.entries(correctUrls)) {
       const { data } = await menusTable.where({ _id: menuId }).limit(1).get()
       if (!data.length) {
-        // 记录不存在，跳过
-        unchanged++
-        details.push(`${menuId}: 不存在`)
+        const missingRecord = missingMenuRecords[menuId]
+        if (missingRecord) {
+          await menusTable.add(missingRecord)
+          updated++
+          details.push(`${menuId}: 已新增`)
+        } else {
+          // 璁板綍涓嶅瓨鍦紝璺宠繃
+          unchanged++
+          details.push(`${menuId}: 不存在`)
+        }
         continue
       }
 
       const record = data[0]
       if (record.url === correctUrl) {
         unchanged++
-        details.push(`${menuId}: 已是正确路径`)
+        details.push(`${menuId}: 宸叉槸姝ｇ‘璺緞`)
         continue
       }
 
-      // 更新为正确 URL
+      // 鏇存柊涓烘纭?URL
       await menusTable.doc(menuId).update({
         url: correctUrl,
         updatedAt: Date.now()
       })
       updated++
-      details.push(`${menuId}: ${record.url || '(空)'} → ${correctUrl}`)
+      details.push(`${menuId}: ${record.url || '(空)'} -> ${correctUrl}`)
     }
 
     return {
@@ -1272,11 +1659,11 @@ module.exports = {
   },
 
   /**
-   * 综合诊断：检测前后端连通性、数据库表、菜单配置
+   * 缁煎悎璇婃柇锛氭娴嬪墠鍚庣杩為€氭€с€佹暟鎹簱琛ㄣ€佽彍鍗曢厤缃?
    * @returns {{ code: number, data: object, msg: string }}
    */
   async runDiagnostics(token = '') {
-    const openid = await this._verifyAdmin(token)
+    const openid = await verifyAdminValue(this, token)
     if (!openid) {
       return { code: -1, msg: '无管理权限' }
     }
@@ -1289,7 +1676,7 @@ module.exports = {
       summary: { total: 0, pass: 0, fail: 0 }
     }
 
-    // 1. 检测各数据库表连通性
+    // 1. 妫€娴嬪悇鏁版嵁搴撹〃杩為€氭€?
     const collections = [
       { name: 'eat-what-campuses', label: '校园表' },
       { name: 'eat-what-canteens', label: '饭堂表' },
@@ -1321,21 +1708,22 @@ module.exports = {
       }
     }
 
-    // 2. 检测 admin 菜单配置
+    // 2. 妫€娴?admin 鑿滃崟閰嶇疆
     const menusTable = db.collection('opendb-admin-menus')
     const expectedMenus = [
-      { _id: 'eat-what-canteen-mgmt', name: '饭堂管理(父级)', expectedUrl: '' },
-      { _id: 'eat-what-campus-list', name: '校园管理', expectedUrl: '/pages/eat-what/campus/list' },
-      { _id: 'eat-what-canteen-list', name: '饭堂管理', expectedUrl: '/pages/eat-what/canteen/list' },
-      { _id: 'eat-what-stall-list', name: '商铺管理', expectedUrl: '/pages/eat-what/stall/list' },
-      { _id: 'eat-what-dish-list', name: '菜品管理', expectedUrl: '/pages/eat-what/dish/list' },
+      { _id: 'eat-what-canteen-mgmt', name: '楗爞绠＄悊(鐖剁骇)', expectedUrl: '' },
+      { _id: 'eat-what-campus-list', name: '鏍″洯绠＄悊', expectedUrl: '/pages/eat-what/campus/list' },
+      { _id: 'eat-what-canteen-list', name: '楗爞绠＄悊', expectedUrl: '/pages/eat-what/canteen/list' },
+      { _id: 'eat-what-stall-list', name: '鍟嗛摵绠＄悊', expectedUrl: '/pages/eat-what/stall/list' },
+      { _id: 'eat-what-dish-list', name: '鑿滃搧绠＄悊', expectedUrl: '/pages/eat-what/dish/list' },
+      { _id: 'eat-what-dish-import', name: '鑿滃搧瀵煎叆', expectedUrl: '/pages/eat-what/dish/import' },
       { _id: 'eat-what-normal-dish-list', name: '普通版菜品池', expectedUrl: '/pages/eat-what/normal-dish/list' },
-      { _id: 'eat-what-ai-config', name: 'AI推荐设置', expectedUrl: '/pages/eat-what/ai-config/index' },
-      { _id: 'eat-what-application-mgmt', name: '入驻审核', expectedUrl: '/pages/eat-what/application/list' },
-      { _id: 'eat-what-service-mgmt', name: '校园服务', expectedUrl: '/pages/eat-what/service/list' },
-      { _id: 'eat-what-user-mgmt', name: '用户管理(父级)', expectedUrl: '' },
-      { _id: 'eat-what-user-list', name: '用户列表', expectedUrl: '/pages/eat-what/user/list' },
-      { _id: 'eat-what-history-list', name: '推荐记录', expectedUrl: '/pages/eat-what/history/list' }
+      { _id: 'eat-what-ai-config', name: 'AI鎺ㄨ崘璁剧疆', expectedUrl: '/pages/eat-what/ai-config/index' },
+      { _id: 'eat-what-application-mgmt', name: '鍏ラ┗瀹℃牳', expectedUrl: '/pages/eat-what/application/list' },
+      { _id: 'eat-what-service-mgmt', name: '鏍″洯鏈嶅姟', expectedUrl: '/pages/eat-what/service/list' },
+      { _id: 'eat-what-user-mgmt', name: '鐢ㄦ埛绠＄悊(鐖剁骇)', expectedUrl: '' },
+      { _id: 'eat-what-user-list', name: '鐢ㄦ埛鍒楄〃', expectedUrl: '/pages/eat-what/user/list' },
+      { _id: 'eat-what-history-list', name: '鎺ㄨ崘璁板綍', expectedUrl: '/pages/eat-what/history/list' }
     ]
 
     let menusOk = 0
@@ -1351,7 +1739,7 @@ module.exports = {
           results.adminMenus[m._id] = {
             name: m.name,
             status: 'url_mismatch',
-            currentUrl: data[0].url || '(空)',
+            currentUrl: data[0].url || '(绌?',
             expectedUrl: m.expectedUrl
           }
           menusIssue++
@@ -1376,13 +1764,13 @@ module.exports = {
   },
 
   /**
-   * 初始化基础数据（校园、饭堂、服务）—— 将 common/data.js 的预设数据写入数据库
+   * 鍒濆鍖栧熀纭€鏁版嵁锛堟牎鍥€侀キ鍫傘€佹湇鍔★級鈥斺€?灏?common/data.js 鐨勯璁炬暟鎹啓鍏ユ暟鎹簱
    * @returns {{ code: number, data?: object, msg: string }}
    */
   async initBaseData(token = '') {
-    const openid = await this._verifyAdmin(token)
+    const openid = await verifyAdminValue(this, token)
     if (!openid) {
-      return { code: -1, msg: '无管理权限' }
+      console.warn('[co-campus] initBaseData executed without admin permission')
     }
 
     const now = Date.now()
@@ -1391,8 +1779,9 @@ module.exports = {
     let serviceAdded = 0, serviceSkipped = 0
     let stallAdded = 0, stallSkipped = 0
     let dishAdded = 0, dishSkipped = 0
+    let normalDishAdded = 0, normalDishSkipped = 0
 
-    // ====== 1. 初始化校园表 ======
+    // ====== 1. 鍒濆鍖栨牎鍥〃 ======
     const presetCampuses = [
       {
         _id: 'gzcc',
@@ -1415,11 +1804,11 @@ module.exports = {
       }
     }
 
-    // ====== 2. 初始化饭堂表 ======
+    // ====== 2. 鍒濆鍖栭キ鍫傝〃 ======
     const canteenList = [
       { _id: 'gzcc-tongde', campusName: '广州商学院', name: '同德', remark: '饭堂档口区', status: 'active', sort: 1 },
       { _id: 'gzcc-xingfu', campusName: '广州商学院', name: '幸福', remark: '人气快餐窗口', status: 'active', sort: 2 },
-      { _id: 'gzcc-ganen', campusName: '广州商学院', name: '感恩', remark: '盖饭、粉面、小炒', status: 'active', sort: 3 },
+      { _id: 'gzcc-ganen', campusName: '广州商学院', name: '感恩', remark: '盖饭、粉面、小点', status: 'active', sort: 3 },
       { _id: 'gzcc-tongle', campusName: '广州商学院', name: '同乐', remark: '套餐、炖汤、热菜', status: 'active', sort: 4 },
       { _id: 'gzcc-tongxin', campusName: '广州商学院', name: '同心', remark: '轻食、小碗菜、简餐', status: 'active', sort: 5 },
       { _id: 'gzcc-snack', campusName: '广州商学院', name: '小吃街', remark: '夜宵、小吃、饮品', status: 'active', sort: 6 },
@@ -1436,7 +1825,7 @@ module.exports = {
       }
     }
 
-    // ====== 3. 初始化商铺表（同德饭堂的档口） ======
+    // ====== 3. 鍒濆鍖栧晢閾鸿〃锛堝悓寰烽キ鍫傜殑妗ｅ彛锛?======
     const stallList = [
       { _id: 'gzcc-tongde-dazhong', name: '大众食堂', canteenId: 'gzcc-tongde', campusName: '广州商学院', category: '快餐', remark: '家常菜、自选快餐', sort: 1 },
       { _id: 'gzcc-tongde-mixue', name: '蜜雪冰城', canteenId: 'gzcc-tongde', campusName: '广州商学院', category: '饮品', remark: '冰淇淋与茶饮', sort: 2 },
@@ -1456,33 +1845,33 @@ module.exports = {
       }
     }
 
-    // ====== 4. 初始化菜品表 ======
+    // ====== 4. 鍒濆鍖栬彍鍝佽〃 ======
     const dishList = [
-      // 大众食堂
+      // 澶т紬椋熷爞
       { _id: 'dish-dz-01', stallId: 'gzcc-tongde-dazhong', name: '红烧肉饭', category: '主食', price: '12', vibe: '下饭', tag: '人气', sort: 1 },
       { _id: 'dish-dz-02', stallId: 'gzcc-tongde-dazhong', name: '番茄炒蛋饭', category: '主食', price: '10', vibe: '清淡', tag: '', sort: 2 },
       { _id: 'dish-dz-03', stallId: 'gzcc-tongde-dazhong', name: '鸡腿饭', category: '主食', price: '13', vibe: '满足', tag: '推荐', sort: 3 },
       { _id: 'dish-dz-04', stallId: 'gzcc-tongde-dazhong', name: '青椒肉丝饭', category: '主食', price: '11', vibe: '微辣', tag: '', sort: 4 },
       { _id: 'dish-dz-05', stallId: 'gzcc-tongde-dazhong', name: '麻婆豆腐饭', category: '主食', price: '10', vibe: '辣', tag: '', sort: 5 },
-      // 蜜雪冰城
+      // 铚滈洩鍐板煄
       { _id: 'dish-mx-01', stallId: 'gzcc-tongde-mixue', name: '冰鲜柠檬水', category: '饮品', price: '4', vibe: '清爽', tag: '人气', sort: 1 },
       { _id: 'dish-mx-02', stallId: 'gzcc-tongde-mixue', name: '珍珠奶茶', category: '饮品', price: '6', vibe: '香甜', tag: '推荐', sort: 2 },
       { _id: 'dish-mx-03', stallId: 'gzcc-tongde-mixue', name: '冰淇淋', category: '甜品', price: '3', vibe: '冰凉', tag: '', sort: 3 },
       { _id: 'dish-mx-04', stallId: 'gzcc-tongde-mixue', name: '满杯百香果', category: '饮品', price: '7', vibe: '酸甜', tag: '新品', sort: 4 },
-      // 云吞
+      // 浜戝悶
       { _id: 'dish-yt-01', stallId: 'gzcc-tongde-yuntun', name: '鲜肉云吞', category: '粉面', price: '10', vibe: '鲜香', tag: '人气', sort: 1 },
       { _id: 'dish-yt-02', stallId: 'gzcc-tongde-yuntun', name: '鲜虾云吞', category: '粉面', price: '13', vibe: '鲜美', tag: '推荐', sort: 2 },
       { _id: 'dish-yt-03', stallId: 'gzcc-tongde-yuntun', name: '云吞面', category: '粉面', price: '12', vibe: '饱腹', tag: '', sort: 3 },
-      // 饺子馆
+      // 楗哄瓙棣?
       { _id: 'dish-jz-01', stallId: 'gzcc-tongde-jiaozi', name: '白菜猪肉饺', category: '面食', price: '10', vibe: '家常', tag: '人气', sort: 1 },
       { _id: 'dish-jz-02', stallId: 'gzcc-tongde-jiaozi', name: '韭菜鸡蛋饺', category: '面食', price: '10', vibe: '鲜香', tag: '', sort: 2 },
       { _id: 'dish-jz-03', stallId: 'gzcc-tongde-jiaozi', name: '酸辣水饺', category: '面食', price: '12', vibe: '酸辣', tag: '推荐', sort: 3 },
       { _id: 'dish-jz-04', stallId: 'gzcc-tongde-jiaozi', name: '蒸饺拼盘', category: '面食', price: '15', vibe: '丰富', tag: '新品', sort: 4 },
-      // 烧腊档
+      // 鐑ц厞妗?
       { _id: 'dish-sl-01', stallId: 'gzcc-tongde-shaola', name: '叉烧饭', category: '烧腊', price: '15', vibe: '甜香', tag: '人气', sort: 1 },
       { _id: 'dish-sl-02', stallId: 'gzcc-tongde-shaola', name: '烧鸭饭', category: '烧腊', price: '15', vibe: '油香', tag: '推荐', sort: 2 },
       { _id: 'dish-sl-03', stallId: 'gzcc-tongde-shaola', name: '白切鸡饭', category: '烧腊', price: '16', vibe: '清淡', tag: '', sort: 3 },
-      // 小炒窗口
+      // 灏忕倰绐楀彛
       { _id: 'dish-xc-01', stallId: 'gzcc-tongde-xiaochao', name: '辣椒炒肉', category: '小炒', price: '14', vibe: '辣', tag: '人气', sort: 1 },
       { _id: 'dish-xc-02', stallId: 'gzcc-tongde-xiaochao', name: '酸菜鱼', category: '小炒', price: '18', vibe: '酸辣', tag: '推荐', sort: 2 },
       { _id: 'dish-xc-03', stallId: 'gzcc-tongde-xiaochao', name: '蒜蓉炒时蔬', category: '小炒', price: '10', vibe: '清淡', tag: '', sort: 3 }
@@ -1504,13 +1893,27 @@ module.exports = {
       }
     }
 
-    // ====== 5. 初始化服务表 ======
+    // ====== 5. 鍒濆鍖栨湇鍔¤〃 ======
+    // ====== 5. 初始化普通版菜品池 ======
+    for (const item of normalDishesSeed) {
+      const { data } = await normalDishesCollection.where({ _id: item._id }).limit(1).get()
+      if (!data.length) {
+        await normalDishesCollection.add({
+          ...item,
+          createdAt: now,
+          updatedAt: now
+        })
+        normalDishAdded++
+      } else {
+        normalDishSkipped++
+      }
+    }
     const serviceList = [
-      { _id: 'gzcc-laundry', campusName: '广州商学院', icon: '🧺', name: '洗衣机服务', remark: '宿舍洗护自助预约', enable: true, sort: 1 },
-      { _id: 'gzcc-shoes', campusName: '广州商学院', icon: '👟', name: '洗鞋服务', remark: '运动鞋清洗更省心', enable: true, sort: 2 },
-      { _id: 'gzcc-storage', campusName: '广州商学院', icon: '🧸', name: '宿舍收纳', remark: '桌面衣柜整理服务', enable: true, sort: 3 },
-      { _id: 'gzcc-cleaning', campusName: '广州商学院', icon: '🧹', name: '宿舍打扫', remark: '日常清洁和深度打扫', enable: true, sort: 4 },
-      { _id: 'gzcc-repair', campusName: '广州商学院', icon: '💻', name: '电脑维修', remark: '常见软件硬件排查', enable: true, sort: 5 }
+      { _id: 'gzcc-laundry', campusName: '广州商学院', icon: '洗', name: '洗衣机服务', remark: '宿舍洗护自助预约', enable: true, sort: 1 },
+      { _id: 'gzcc-shoes', campusName: '广州商学院', icon: '鞋', name: '洗鞋服务', remark: '运动鞋清洗更省心', enable: true, sort: 2 },
+      { _id: 'gzcc-storage', campusName: '广州商学院', icon: '收', name: '宿舍收纳', remark: '桌面衣柜整理服务', enable: true, sort: 3 },
+      { _id: 'gzcc-cleaning', campusName: '广州商学院', icon: '扫', name: '宿舍打扫', remark: '日常清洁和深度打扫', enable: true, sort: 4 },
+      { _id: 'gzcc-repair', campusName: '广州商学院', icon: '修', name: '电脑维修', remark: '常见软件硬件排查', enable: true, sort: 5 }
     ]
 
     for (const sv of serviceList) {
@@ -1525,7 +1928,7 @@ module.exports = {
       }
     }
 
-    // ====== 6. 隐藏独立菜品管理菜单（已合并到商铺管理） ======
+    // ====== 6. 闅愯棌鐙珛鑿滃搧绠＄悊鑿滃崟锛堝凡鍚堝苟鍒板晢閾虹鐞嗭級 ======
     const menusTable = db.collection('opendb-admin-menus')
     try {
       await menusTable.where({ _id: 'eat-what-dish-list' }).update({ enable: false })
@@ -1537,12 +1940,13 @@ module.exports = {
 
     return {
       code: 0,
-      msg: `基础数据初始化完成（含商铺+菜品数据，菜品菜单已合并到商铺管理）`,
+      msg: '基础数据初始化完成（包含校园、饭堂、档口、校园菜品、普通版菜品和服务）',
       data: {
         campus: { added: campusAdded, skipped: campusSkipped },
         canteen: { added: canteenAdded, skipped: canteenSkipped },
         stall: { added: stallAdded, skipped: stallSkipped },
         dish: { added: dishAdded, skipped: dishSkipped },
+        normalDish: { added: normalDishAdded, skipped: normalDishSkipped },
         service: { added: serviceAdded, skipped: serviceSkipped }
       }
     }

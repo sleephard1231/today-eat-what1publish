@@ -59,11 +59,51 @@ export const campusCanteenMap = {
 
 export const campusServiceMap = {
   '广州商学院': [
-    { id: 'gzcc-laundry', icon: '🧺', name: '洗衣机服务', remark: '宿舍洗护自助预约' },
-    { id: 'gzcc-shoes', icon: '👟', name: '洗鞋服务', remark: '运动鞋清洗更省心' },
-    { id: 'gzcc-storage', icon: '🧸', name: '宿舍收纳', remark: '桌面衣柜整理服务' },
-    { id: 'gzcc-cleaning', icon: '🧹', name: '宿舍打扫', remark: '日常清洁和深度打扫' },
-    { id: 'gzcc-repair', icon: '💻', name: '电脑维修', remark: '常见软件硬件排查' }
+    {
+      id: 'gzcc-laundry',
+      icon: '🧺',
+      name: '洗衣机服务',
+      remark: '宿舍洗护自助预约',
+      description: '适合想省点力气的时候来下单，常用衣物、床品和基础洗护都能先问清楚再安排。',
+      detailTips: ['支持先咨询再下单', '适合宿舍日常换洗', '高峰期建议先问档期'],
+      consultHint: '点下方按钮后，会打开微信里的官方客服会话。'
+    },
+    {
+      id: 'gzcc-shoes',
+      icon: '👟',
+      name: '洗鞋服务',
+      remark: '运动鞋清洗更省心',
+      description: '日常运动鞋、帆布鞋这类清洗需求都可以先沟通，先看看适不适合处理、多久能拿回。',
+      detailTips: ['适合先问鞋型和污渍情况', '可先确认周期', '复杂材质建议先发图沟通'],
+      consultHint: '先聊清楚再安排，会比直接下判断更稳。'
+    },
+    {
+      id: 'gzcc-storage',
+      icon: '🧸',
+      name: '宿舍收纳',
+      remark: '桌面衣柜整理服务',
+      description: '适合桌面、衣柜和常用角落的轻整理需求，先说说你想收哪一块，会更容易安排得顺手。',
+      detailTips: ['适合开学换季', '可先说整理范围', '适合想快速清爽一点的时候'],
+      consultHint: '先聊整理诉求，再决定要不要安排上门。'
+    },
+    {
+      id: 'gzcc-cleaning',
+      icon: '🧹',
+      name: '宿舍打扫',
+      remark: '日常清洁和深度打扫',
+      description: '从日常简单清洁到重点区域打扫，都可以先问清楚服务范围，避免你下单后还要来回确认。',
+      detailTips: ['适合宿舍日常维护', '可先确认清洁范围', '深度打扫建议提前约'],
+      consultHint: '先把打扫重点说清楚，沟通起来会轻松很多。'
+    },
+    {
+      id: 'gzcc-repair',
+      icon: '💻',
+      name: '电脑维修',
+      remark: '常见软件硬件排查',
+      description: '蓝屏、卡顿、软件装不上这类问题都可以先咨询，先判断大概方向，再决定是否线下处理。',
+      detailTips: ['先描述故障现象', '软件问题通常更快判断', '硬件异常建议先备份数据'],
+      consultHint: '先把问题说一遍，通常能更快判断是不是值得跑一趟。'
+    }
   ]
 }
 

@@ -374,34 +374,24 @@ function getTodayFortune(state = getAppState()) {
   };
 }
 async function submitCampusApplication(formData) {
-  if (utils_userState.isCloudUser()) {
-    const user = utils_userState.getUser();
-    const result = await utils_cloud.cloudSubmitApplication(user.token, formData);
-    if (result.code === 0 && result.data) {
-      const applications2 = getStoredApplications();
-      const record2 = {
-        ...formData,
-        campusId: result.data.campusId || `campus-${Date.now()}`,
-        createdAt: formatTimeLabel(),
-        status: result.data.status || "待审核"
-      };
-      safeWrite(APPLICATION_KEY, [record2, ...applications2]);
-      common_vendor.index.$emit("app-state-changed");
-      return record2;
-    }
-    throw new Error(result.msg || "提交失败，请稍后再试");
+  if (!utils_userState.isCloudUser()) {
+    throw new Error("请先登录后再提交申请");
   }
-  const applications = getStoredApplications();
-  const campusId = `campus-${Date.now()}`;
-  const record = {
-    ...formData,
-    campusId,
-    createdAt: formatTimeLabel(),
-    status: "待审核"
-  };
-  safeWrite(APPLICATION_KEY, [record, ...applications]);
-  common_vendor.index.$emit("app-state-changed");
-  return record;
+  const user = utils_userState.getUser();
+  const result = await utils_cloud.cloudSubmitApplication(user.token, formData);
+  if (result.code === 0 && result.data) {
+    const applications = getStoredApplications();
+    const record = {
+      ...formData,
+      campusId: result.data.campusId || `campus-${Date.now()}`,
+      createdAt: formatTimeLabel(),
+      status: result.data.status || "待审核"
+    };
+    safeWrite(APPLICATION_KEY, [record, ...applications]);
+    common_vendor.index.$emit("app-state-changed");
+    return record;
+  }
+  throw new Error(result.msg || "提交失败，请稍后再试");
 }
 function getCampusApplications() {
   return getStoredApplications();
@@ -444,7 +434,7 @@ async function fetchCloudCanteens(campusName) {
     }
     throw new Error("获取失败");
   } catch (err) {
-    common_vendor.index.__f__("warn", "at utils/app-state.js:685", "[app-state] fetchCloudCanteens fallback to local", err == null ? void 0 : err.message);
+    common_vendor.index.__f__("warn", "at utils/app-state.js:673", "[app-state] fetchCloudCanteens fallback to local", err == null ? void 0 : err.message);
     return common_data.campusCanteenMap[campusName] || [];
   }
 }
@@ -475,7 +465,7 @@ async function fetchNormalFoodPool(forceRefresh = false) {
       return data;
     }
   } catch (err) {
-    common_vendor.index.__f__("warn", "at utils/app-state.js:725", "[app-state] fetchNormalFoodPool error", err == null ? void 0 : err.message);
+    common_vendor.index.__f__("warn", "at utils/app-state.js:713", "[app-state] fetchNormalFoodPool error", err == null ? void 0 : err.message);
   }
   return common_data.genericFoods.map((item) => normalizeFoodCandidate(item, { source: "local-normal" }));
 }
@@ -498,7 +488,7 @@ async function fetchCampusFoodPool(state, forceRefresh = false) {
         return data;
       }
     } catch (err) {
-      common_vendor.index.__f__("warn", "at utils/app-state.js:752", "[app-state] fetchCampusFoodPool error", err == null ? void 0 : err.message);
+      common_vendor.index.__f__("warn", "at utils/app-state.js:740", "[app-state] fetchCampusFoodPool error", err == null ? void 0 : err.message);
     }
   }
   const selectedCanteenNames = canteens.map((item) => item.name).filter(Boolean);
@@ -591,7 +581,7 @@ async function aiPickFromCandidates({ candidates = [], state, fortune, seed = Da
       };
     }
   } catch (err) {
-    common_vendor.index.__f__("warn", "at utils/app-state.js:859", "[app-state] aiPickFromCandidates error", err == null ? void 0 : err.message);
+    common_vendor.index.__f__("warn", "at utils/app-state.js:847", "[app-state] aiPickFromCandidates error", err == null ? void 0 : err.message);
   }
   return { choice: 0, reason: fallbackReason, isAI: false };
 }
