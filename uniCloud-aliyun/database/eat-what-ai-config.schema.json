@@ -32,19 +32,19 @@
       "bsonType": "string",
       "description": "AI 服务商",
       "title": "服务商",
-      "defaultValue": "dashscope"
+      "defaultValue": "openai-compatible"
     },
     "providerType": {
       "bsonType": "string",
-      "description": "供应商类型，支持 dashscope/openai-compatible/anthropic-compatible/openai/deepseek",
+      "description": "供应商类型，主要使用 openai-compatible/deepseek；旧配置仍兼容 dashscope/anthropic-compatible/openai",
       "title": "供应商类型",
-      "defaultValue": "dashscope"
+      "defaultValue": "openai-compatible"
     },
     "providerName": {
       "bsonType": "string",
       "description": "供应商显示名称",
       "title": "供应商名称",
-      "defaultValue": "通义千问 DashScope"
+      "defaultValue": "Moonshot Kimi"
     },
     "remark": {
       "bsonType": "string",
@@ -60,7 +60,7 @@
       "bsonType": "string",
       "description": "AI API 请求地址",
       "title": "API请求地址",
-      "defaultValue": "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions"
+      "defaultValue": "https://api.moonshot.cn/v1/chat/completions"
     },
     "useFullUrl": {
       "bsonType": "bool",
@@ -72,7 +72,7 @@
       "bsonType": "string",
       "description": "模型名称",
       "title": "模型",
-      "defaultValue": "qwen-plus"
+      "defaultValue": "kimi-k2.5"
     },
     "dailyLimit": {
       "bsonType": "int",

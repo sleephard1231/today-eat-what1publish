@@ -59,23 +59,24 @@
     </view>
 
     <text class="section-label">常用功能</text>
-    <view v-if="isCampusMode" class="service-entry press-feedback" :style="serviceEntryStyle" hover-class="press-feedback--active" hover-start-time="20" hover-stay-time="90" @click="goServicePage">
-      <view class="service-entry__copy">
-        <text class="service-entry__eyebrow">🏫 校园生活服务</text>
-        <text class="service-entry__title">按当前学校解锁对应服务</text>
-        <view v-if="openedCampusServiceTags.length" class="service-entry__tags">
-          <text v-for="tag in openedCampusServiceTags" :key="tag" class="service-entry__tag">{{ tag }}</text>
+    <view class="feature-stack">
+      <view v-if="isCampusMode" class="feature-card press-feedback" :style="serviceEntryStyle" hover-class="press-feedback--active" hover-start-time="20" hover-stay-time="90" @click="goServicePage">
+        <view class="feature-card__copy">
+          <text class="feature-card__title">🏫 校园生活服务</text>
+          <text class="feature-card__desc">按当前学校解锁对应服务</text>
+          <view v-if="openedCampusServiceTags.length" class="feature-card__tags">
+            <text v-for="tag in openedCampusServiceTags" :key="tag" class="feature-card__tag">{{ tag }}</text>
+          </view>
         </view>
+        <text class="feature-card__action" :style="serviceEntryActionStyle">进入</text>
       </view>
-      <text class="service-entry__action" :style="serviceEntryActionStyle">进入</text>
-    </view>
-    <view class="section-card" :style="cardStyle">
-      <view class="row-item press-feedback" hover-class="press-feedback--active" hover-start-time="20" hover-stay-time="90" @click="goHistoryPage">
-        <view>
-          <text class="row-title">📜 历史记录</text>
-          <text class="row-desc">看看最近都推荐过什么，回头翻一翻也更方便。</text>
+
+      <view class="feature-card press-feedback" :style="cardStyle" hover-class="press-feedback--active" hover-start-time="20" hover-stay-time="90" @click="goHistoryPage">
+        <view class="feature-card__copy">
+          <text class="feature-card__title">📜 历史记录</text>
+          <text class="feature-card__desc">看看最近都推荐过什么，回头翻一翻也更方便。</text>
         </view>
-        <view class="count-badge" :style="accentFillStyle">{{ historyCount }}</view>
+        <view class="feature-card__count" :style="accentFillStyle">{{ historyCount }}</view>
       </view>
     </view>
 
@@ -535,34 +536,51 @@ async function handleLogin() {
 
   isLoggingIn.value = true
   try {
-    const avatar = await uploadAvatarToCloud(loginForm.avatar)
-    if (loginForm.avatar && !avatar) {
-      uni.showToast({ title: '头像上传失败，请重新选择', icon: 'none' })
-      return
-    }
-    // 优先云端登录，失败自动降级为本地登录
+    const nickname = loginForm.nickname.trim()
+    const selectedAvatar = loginForm.avatar || ''
     const result = await cloudLogin({
-      nickname: loginForm.nickname.trim(),
-      avatar
+      nickname,
+      avatar: ''
     })
 
     const loginMode = result.loginMode || 'local'
     const data = result.data || {}
+    const localAvatar = loginMode === 'local' ? selectedAvatar : ''
 
     // 更新本地状态
     saveAppState({
       profile: {
-        nickname: loginForm.nickname.trim(),
-        avatar,
+        nickname,
+        avatar: localAvatar,
         openId: data.openid || ''
       }
     })
+
+    if (loginMode === 'local' && selectedAvatar) {
+      saveUser({
+        nickname,
+        avatar: selectedAvatar
+      })
+    }
 
     user.value = getUser()
     state.value = getAppState()
     showLoginSheet.value = false
 
     if (loginMode === 'cloud') {
+      if (selectedAvatar) {
+        const avatar = await uploadAvatarToCloud(selectedAvatar)
+        if (avatar) {
+          saveUser({ avatar })
+          saveAppState({ profile: { avatar } })
+          await syncProfileToCloud({ avatar })
+          user.value = getUser()
+          state.value = getAppState()
+        } else {
+          uni.showToast({ title: '登录成功，头像可以稍后再补传', icon: 'none' })
+        }
+      }
+
       uni.showToast({ title: '登录成功', icon: 'none' })
     } else {
       const fallbackMsg = result.fallbackMsg || '云端登录暂时不可用'
@@ -727,15 +745,16 @@ function goUserAgreement() {
 .profile-card--top { margin-top: 0; }
 .section-label { display: block; margin: 22rpx 8rpx 12rpx; color: rgba(160, 149, 139, 0.78); font-size: 20rpx; letter-spacing: 1rpx; }
 .section-card { margin-top: 0; }
-.service-entry { display: flex; align-items: center; justify-content: space-between; gap: 24rpx; margin-top: 24rpx; border-radius: 34rpx; padding: 34rpx 30rpx; }
-.service-entry__copy { flex: 1; }
-.service-entry__eyebrow, .service-entry__title, .service-entry__desc { display: block; }
-.service-entry__eyebrow { color: #2f251d; font-size: 32rpx; font-weight: 700; }
-.service-entry__title { margin-top: 14rpx; color: #3c3027; font-size: 30rpx; font-weight: 700; }
-.service-entry__tags { display: flex; flex-wrap: wrap; gap: 10rpx; margin-top: 14rpx; }
-.service-entry__tag { padding: 6rpx 14rpx; border-radius: 999rpx; background: rgba(255,255,255,0.78); color: #5e766e; font-size: 20rpx; font-weight: 600; line-height: 1.2; }
-.service-entry__desc { margin-top: 12rpx; color: #96897e; font-size: 25rpx; line-height: 1.6; }
-.service-entry__action { flex-shrink: 0; padding: 18rpx 24rpx; border-radius: 24rpx; font-size: 28rpx; font-weight: 700; }
+.feature-stack { display: flex; flex-direction: column; gap: 14rpx; }
+.feature-card { display: flex; align-items: center; justify-content: space-between; gap: 22rpx; min-height: 142rpx; border-radius: 34rpx; padding: 26rpx 28rpx; }
+.feature-card__copy { flex: 1; min-width: 0; }
+.feature-card__title, .feature-card__desc { display: block; }
+.feature-card__title { color: #2f251d; font-size: 32rpx; font-weight: 700; line-height: 1.3; }
+.feature-card__desc { margin-top: 10rpx; color: #9f9388; font-size: 25rpx; line-height: 1.45; }
+.feature-card__tags { display: flex; flex-wrap: wrap; gap: 8rpx; margin-top: 12rpx; max-height: 44rpx; overflow: hidden; }
+.feature-card__tag { padding: 5rpx 13rpx; border-radius: 999rpx; background: rgba(255,255,255,0.78); color: #5e766e; font-size: 20rpx; font-weight: 600; line-height: 1.2; }
+.feature-card__action { flex-shrink: 0; min-width: 86rpx; height: 70rpx; padding: 0 22rpx; border-radius: 24rpx; text-align: center; line-height: 70rpx; font-size: 28rpx; font-weight: 700; }
+.feature-card__count { flex-shrink: 0; min-width: 62rpx; height: 62rpx; padding: 0 14rpx; border-radius: 22rpx; text-align: center; line-height: 62rpx; font-size: 27rpx; font-weight: 700; }
 .profile-top { display: flex; align-items: center; gap: 22rpx; }
 .avatar-shell { display: flex; align-items: center; justify-content: center; width: 116rpx; height: 116rpx; border-radius: 50%; flex-shrink: 0; }
 .avatar { width: 96rpx; height: 96rpx; border-radius: 50%; text-align: center; line-height: 96rpx; font-size: 40rpx; font-weight: 700; display: flex; align-items: center; justify-content: center; overflow: hidden; }
@@ -762,7 +781,6 @@ function goUserAgreement() {
 .campus-name { display: block; margin-top: 14rpx; color: #2f251d; font-size: 36rpx; font-weight: 700; line-height: 1.3; }
 .row-desc { display: block; margin-top: 12rpx; color: #9f9388; font-size: 25rpx; line-height: 1.5; }
 .row-action { font-size: 30rpx; font-weight: 700; }
-.count-badge { min-width: 56rpx; height: 56rpx; padding: 0 16rpx; border-radius: 22rpx; text-align: center; line-height: 56rpx; font-size: 26rpx; font-weight: 700; }
 .sheet-mask { position: fixed; inset: 0; display: flex; align-items: flex-end; justify-content: center; background: rgba(61,45,31,0.26); z-index: 999; }
 .sheet-panel { width: 100%; max-height: 72vh; display: flex; flex-direction: column; border-radius: 40rpx 40rpx 0 0; padding: 18rpx 24rpx calc(28rpx + env(safe-area-inset-bottom)); }
 .sheet-panel--login { max-height: 55vh; }

@@ -1,6 +1,6 @@
 ﻿/**
  * co-ai 云对象
- * 负责AI推荐理由生成（通义千问 DashScope API）
+ * 负责 AI 推荐理由生成（Kimi / DeepSeek / GLM / OpenAI 兼容中转站）
  *
  * 前端调用方式：
  *   const co = uniCloud.importObject('co-ai')
@@ -10,7 +10,14 @@
 const db = uniCloud.database()
 
 // 推荐在后台「AI推荐设置」里维护 API Key；环境变量只作为兜底。
-const DASHSCOPE_API_KEY = String(process.env.DASHSCOPE_API_KEY || '').trim()
+const FALLBACK_AI_API_KEY = String(
+  process.env.AI_API_KEY ||
+  process.env.KIMI_API_KEY ||
+  process.env.DEEPSEEK_API_KEY ||
+  process.env.GLM_API_KEY ||
+  process.env.DASHSCOPE_API_KEY ||
+  ''
+).trim()
 
 // 小程序管理员 openid 兜底校验；后台 uni-admin 会优先走 uni-id 管理员角色校验。
 const ADMIN_OPENID_FALLBACKS = ['oxKFC3UzlxECsob71tnJsRgCVY1E']
@@ -47,14 +54,14 @@ const DEFAULT_AI_CONFIG = {
   enable: false,
   enableNormal: true,
   enableCampus: true,
-  provider: 'dashscope',
-  providerType: 'dashscope',
-  providerName: '通义千问 DashScope',
+  provider: 'openai-compatible',
+  providerType: 'openai-compatible',
+  providerName: 'Moonshot Kimi',
   remark: '',
-  websiteUrl: 'https://dashscope.aliyun.com',
-  apiUrl: DASHSCOPE_URL,
+  websiteUrl: 'https://platform.kimi.com',
+  apiUrl: 'https://api.moonshot.cn/v1/chat/completions',
   useFullUrl: true,
-  model: 'qwen-plus',
+  model: 'kimi-k2.5',
   dailyLimit: DAILY_PICK_LIMIT_MAX,
   minuteLimit: PICK_RATE_LIMIT_MAX,
   promptStyle: '朋友聊天',
@@ -258,12 +265,12 @@ function getDefaultProviderName(providerType) {
   if (providerType === 'openai-compatible') return 'OpenAI 兼容接口'
   if (providerType === 'openai') return 'OpenAI'
   if (providerType === 'deepseek') return 'DeepSeek'
-  return '通义千问 DashScope'
+  return DEFAULT_AI_CONFIG.providerName
 }
 
 function getDefaultModel(providerType) {
   if (providerType === 'openai') return 'gpt-4o-mini'
-  if (providerType === 'deepseek') return 'deepseek-chat'
+  if (providerType === 'deepseek') return 'deepseek-v4-flash'
   if (providerType === 'anthropic-compatible') return 'kimi-k2.5'
   if (providerType === 'openai-compatible') return 'gpt-4o-mini'
   return DEFAULT_AI_CONFIG.model
@@ -271,6 +278,29 @@ function getDefaultModel(providerType) {
 
 function isDashScopeLegacyUrl(url = '') {
   return /\/api\/v1\/services\/aigc\/text-generation\/generation\/?$/.test(String(url || ''))
+}
+
+function buildOpenAiCompatibleBody(config, messages, options = {}) {
+  const model = String(config.model || '').trim()
+  const body = {
+    model,
+    messages,
+    temperature: options.temperature === undefined ? 0.7 : options.temperature,
+    max_tokens: options.maxTokens || 120
+  }
+
+  // Thinking models can spend many more tokens. The app only needs short food-copy,
+  // so keep them in non-thinking mode where the provider supports it.
+  if (/^kimi-k2\.5/i.test(model)) {
+    body.max_completion_tokens = body.max_tokens
+    delete body.max_tokens
+    delete body.temperature
+    body.thinking = { type: 'disabled' }
+  } else if (/^deepseek-v4/i.test(model)) {
+    body.thinking = { type: 'disabled' }
+  }
+
+  return body
 }
 
 function normalizeApiUrl(config) {
@@ -348,12 +378,7 @@ function buildChatRequest(config, messages, options = {}) {
 
   return {
     url: apiUrl,
-    body: {
-      model: config.model,
-      messages,
-      temperature: options.temperature === undefined ? 0.7 : options.temperature,
-      max_tokens: options.maxTokens || 120
-    }
+    body: buildOpenAiCompatibleBody(config, messages, options)
   }
 }
 
@@ -443,18 +468,25 @@ async function recordAiUsage(config, usage = {}, extra = {}) {
     lastTestApiUrl: extra.lastTestApiUrl || currentUsage.lastTestApiUrl || '',
     lastTestModel: extra.lastTestModel || currentUsage.lastTestModel || ''
   }
+  const updatedAt = Date.now()
   await aiConfigCollection.doc(AI_CONFIG_ID).update({
     usage: nextUsage,
-    updatedAt: Date.now()
+    updatedAt
   })
+  aiConfigCache.value = {
+    ...current,
+    usage: nextUsage,
+    updatedAt
+  }
+  aiConfigCache.expireAt = updatedAt + CONFIG_CACHE_TTL
   return nextUsage
 }
 
 function resolveApiKey(config = {}) {
   const savedKey = String(config.apiKey || '').trim()
   if (savedKey) return savedKey
-  if (DASHSCOPE_API_KEY) {
-    return DASHSCOPE_API_KEY
+  if (FALLBACK_AI_API_KEY) {
+    return FALLBACK_AI_API_KEY
   }
   return ''
 }
@@ -661,7 +693,7 @@ module.exports = {
     }
 
     if (!apiKey) {
-      console.warn('[co-ai] DASHSCOPE_API_KEY not configured')
+      console.warn('[co-ai] AI API key not configured')
       return { code: -1, msg: 'AI 服务未配置' }
     }
 
@@ -736,7 +768,7 @@ module.exports = {
     }
 
     if (!apiKey) {
-      console.warn('[co-ai] DASHSCOPE_API_KEY not configured')
+      console.warn('[co-ai] AI API key not configured')
       return { code: -1, msg: 'AI 服务未配置' }
     }
 
@@ -965,7 +997,7 @@ module.exports = {
     })
     const apiKey = resolveApiKey(testingConfig)
     if (!apiKey) {
-      return { code: -1, msg: '请先填写 DashScope API Key' }
+      return { code: -1, msg: '请先填写当前供应商的 API Key' }
     }
 
     try {

@@ -3,8 +3,8 @@
  * 负责微信登录、用户资料管理、状态同步、历史同步
  */
 
-const WX_APPID = 'wx3212c0e346843235'
-const WX_APPSECRET = '9a2f13b99c9f0c1c9b106e5552d74b3e'
+const WX_APPID = process.env.WX_APPID || 'wx3212c0e346843235'
+const WX_APPSECRET = process.env.WX_APPSECRET || ''
 
 const TOKEN_EXPIRE_MS = 7 * 24 * 60 * 60 * 1000
 const TOKEN_CACHE_TTL = 60 * 1000

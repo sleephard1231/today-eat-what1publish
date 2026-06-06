@@ -595,9 +595,9 @@ eat-what-ai-usage:
 
 ## 当前代码状态同步
 
-- `co-ai` 的 `DASHSCOPE_API_KEY` 占位字符串问题已修复，当前改为读取 `process.env.DASHSCOPE_API_KEY`，不再是硬编码 `'你的dashscope-api-key'`。
+- `co-ai` 的 API Key 占位字符串问题已修复，当前优先读取后台 AI 配置；环境变量兜底支持 `AI_API_KEY`、`KIMI_API_KEY`、`DEEPSEEK_API_KEY`、`GLM_API_KEY`，并兼容旧的 `DASHSCOPE_API_KEY`。
 - `co-ai` 与 `co-campus` 的 `ADMIN_OPENIDS` 空数组问题也已修复，当前都支持环境变量，并带有 fallback 管理员 openid。
-- AI 默认模型不一致问题已修复：`co-ai` 默认模型与 `eat-what-ai-config.schema.json` 当前都为 `qwen-plus`。
+- AI 默认模型不一致问题已修复：`co-ai` 默认配置与 `eat-what-ai-config.schema.json` 当前都默认指向 Kimi 官方接口，模型为 `kimi-k2.5`。后台仍可随时切换到 DeepSeek 官方、GLM 官方或 OpenAI 兼容中转站。
 - 这几项虽然源码已对齐，但上线前仍要确认真实环境变量、后台 AI 配置和云函数部署都已完成。
 
 ## 风险 10：内容安全检查会额外调用微信接口

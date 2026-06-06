@@ -165,7 +165,7 @@
 | `WX_APPSECRET` | `co-user/index.obj.js` | 微信小程序 AppSecret |
 | `WX_APPID` | `co-content/index.obj.js` | 微信小程序 AppID |
 | `WX_APPSECRET` | `co-content/index.obj.js` | 微信小程序 AppSecret |
-| `DASHSCOPE_API_KEY` | `co-ai/index.obj.js` | 通义千问 API Key |
+| `AI_API_KEY` / `KIMI_API_KEY` / `DEEPSEEK_API_KEY` / `GLM_API_KEY` | `co-ai/index.obj.js` | AI API Key 兜底配置；优先使用后台“AI 推荐设置”保存的密钥 |
 | `ADMIN_OPENIDS` | `co-campus/index.obj.js` | 管理员 openid 数组 |
 
 ---

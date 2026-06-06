@@ -53,7 +53,8 @@ export function isLoggedIn() {
 }
 
 export function saveUser(user) {
-  safeWrite(USER_KEY, { ...defaultUser, ...user, isLoggedIn: true })
+  const currentUser = safeRead(USER_KEY, defaultUser)
+  safeWrite(USER_KEY, { ...defaultUser, ...currentUser, ...user, isLoggedIn: true })
   uni.$emit('user-state-changed')
 }
 

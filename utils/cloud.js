@@ -26,6 +26,21 @@ let coCampus = null
 let coContent = null
 let coAi = null
 
+function getReadableCloudError(err) {
+  const rawMsg = String(
+    err?.errMsg ||
+    err?.message ||
+    err?.msg ||
+    ''
+  )
+
+  if (/url not in domain list/i.test(rawMsg)) {
+    return '当前微信小程序还没配置 uniCloud 合法域名，请到微信公众平台把 api.next.bspapp.com 加到 request 合法域名里。'
+  }
+
+  return rawMsg || '云函数调用失败，请检查网络'
+}
+
 function getStoredUserToken() {
   try {
     const user = uni.getStorageSync('eat-what-user') || {}
@@ -95,7 +110,7 @@ export async function cloudWxLogin(userInfo = {}) {
     return result
   } catch (err) {
     console.warn('[cloud] cloudWxLogin error', err)
-    return { code: -1, msg: '云函数调用失败，请检查网络' }
+    return { code: -1, msg: getReadableCloudError(err) }
   }
 }
 
@@ -108,7 +123,7 @@ export async function cloudGetProfile(token) {
     return await co.getProfile(token)
   } catch (err) {
     console.warn('[cloud] cloudGetProfile error', err)
-    return { code: -1, msg: '获取资料失败' }
+    return { code: -1, msg: getReadableCloudError(err) || '获取资料失败' }
   }
 }
 
@@ -121,7 +136,7 @@ export async function cloudUpdateProfile(token, profileData) {
     return await co.updateProfile(token, profileData)
   } catch (err) {
     console.warn('[cloud] cloudUpdateProfile error', err)
-    return { code: -1, msg: '更新资料失败' }
+    return { code: -1, msg: getReadableCloudError(err) || '更新资料失败' }
   }
 }
 
